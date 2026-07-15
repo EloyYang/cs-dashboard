@@ -627,23 +627,14 @@ const DATA = { seed: [], review: [], jochi: [], realtime: [], computer: [], remo
 let attendLoaded = false;   // 근태특이사항 시트를 실제로 읽었는지 (못 읽으면 근태를 '-'로 표시)
 let attendCols = null;      // 자동 인식한 {name, date} 열 이름 — 화면에 표기해 확인할 수 있게 한다
 
-/* 헤더 후보 중 먼저 맞는 열 (정확히 일치 → 부분 일치 순). 없으면 -1 */
-function colIdxAny(header, names) {
+/* 헤더 후보 중 먼저 맞는 열 (정확히 일치 → 부분 일치 순). 없으면 fallback */
+function colIdxAny(header, names, fallback) {
   for (const n of names) { const i = header.findIndex(h => h.trim() === n); if (i >= 0) return i; }
   for (const n of names) { const i = header.findIndex(h => h.trim().includes(n)); if (i >= 0) return i; }
-  return -1;
+  return fallback;
 }
-/* 헤더로 못 찾을 때: 조건을 가장 많이 만족하는 열을 고른다 */
-function guessCol(body, pred) {
-  const width = body.reduce((m, r) => Math.max(m, r.length), 0);
-  let best = -1, bestHits = 0;
-  for (let c = 0; c < width; c++) {
-    let hits = 0;
-    for (const r of body) { const v = String(r[c] ?? '').trim(); if (v && pred(v)) hits++; }
-    if (hits > bestHits) { bestHits = hits; best = c; }
-  }
-  return bestHits > 0 ? best : -1;
-}
+/* 열 인덱스 → 시트 열 이름 (0→A, 2→C) */
+const colName = i => { let s = ''; for (i++; i > 0; i = Math.floor((i - 1) / 26)) s = String.fromCharCode(65 + (i - 1) % 26) + s; return s; };
 
 function normalize(key, rows) {
   if (!rows.length) { DATA[key] = []; return; }
@@ -694,20 +685,17 @@ function normalize(key, rows) {
       });
     }
   } else if (key === 'attend') {
-    // 근태특이사항: 이름+날짜 기록 1건당 -1점. 열 위치는 헤더로 찾고, 못 찾으면 값으로 추정한다.
-    let iName = colIdxAny(H, ['이름', '성명', '점검자명', '점검자', '대상자']);
-    let iDate = colIdxAny(H, ['날짜', '일자', '근태일자', '발생일', '일시']);
-    if (iDate < 0) iDate = guessCol(body, v => !!parseDateStr(v));
-    if (iName < 0) {
-      const names = new Set(DATA.seed.map(r => r.agent).filter(Boolean));
-      iName = guessCol(body, v => names.has(v));
-    }
-    if (iName < 0 || iDate < 0) { attendCols = null; DATA.attend = []; return; }
-    attendCols = { name: H[iName] || ('열 ' + (iName + 1)), date: H[iDate] || ('열 ' + (iDate + 1)) };
+    // 근태특이사항(B~I열): No.=B, 날짜=C, 이름=D, 파트=E, 세부내용=F, 비고=G, 연도=H, 월=I
+    // 기록 1건 = 근태 -1점. 헤더로 열을 찾고, 못 찾으면 위 위치를 그대로 쓴다.
+    const iDate = colIdxAny(H, ['날짜', '일자', '근태일자', '발생일'], 2);
+    const iName = colIdxAny(H, ['이름', '성명', '점검자명', '점검자', '대상자'], 3);
+    const iPart = colIdxAny(H, ['파트', '소속'], 4);
+    const iDetail = colIdxAny(H, ['근태특이사항 세부내용', '세부내용', '특이사항'], 5);
+    attendCols = { name: H[iName] || ('열 ' + colName(iName)), date: H[iDate] || ('열 ' + colName(iDate)) };
     for (const r of body) {
       const date = parseDateStr(S(r, iDate)), name = S(r, iName);
-      if (!date || !name) continue;
-      out.push({ name, date });
+      if (!date || !name) continue;   // 헤더·빈 행·합계 행 등은 자연히 걸러진다
+      out.push({ name, date, part: S(r, iPart), detail: S(r, iDetail) });
     }
   } else if (key === 'realtime') {
     const iDate = colIdx(H, '처리일자', 7), iContent = colIdx(H, '처리내용', 1), iTeam = colIdx(H, '소속', 13), iAgent = colIdx(H, '처리자', 5);
@@ -2355,13 +2343,13 @@ async function loadAll() {
   // 근태특이사항 (별도 스프레드시트) — 실패해도 나머지 대시보드는 그대로 보여준다
   attendLoaded = false; attendCols = null;
   try {
-    const res = await apiBatchGet({ attend: ATTEND_TAB.range }, ATTEND_SHEET_ID);
-    normalize('attend', res.attend || []);
+    const rows = (await apiBatchGet({ attend: ATTEND_TAB.range }, ATTEND_SHEET_ID)).attend || [];
+    normalize('attend', rows);
     const li = $('ld-attend'), st = li.querySelector('.st');
-    if (!attendCols) {
+    if (!DATA.attend.length && rows.length > 1) { // 행은 있는데 한 건도 못 읽음 = 열이 어긋난 것
       li.className = 'fail';
-      st.textContent = '✗ 이름·날짜 열을 찾지 못함';
-      attendWarn('근태특이사항 시트에서 이름·날짜 열을 찾지 못해 근태를 계산하지 못했습니다. 1행 헤더에 「이름」·「날짜」가 있는지 확인해 주세요.');
+      st.textContent = '✗ 기록을 읽지 못함';
+      attendWarn('근태특이사항 시트에서 이름·날짜를 읽지 못해 근태 지표가 «-»로 표시됩니다. C열=날짜, D열=이름이 맞는지 확인해 주세요.');
     } else {
       attendLoaded = true;
       li.className = 'done';
