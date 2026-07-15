@@ -1,0 +1,2070 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>고객센터 인입 대시보드</title>
+<style>
+:root{
+  --page:#f9f9f7; --surface:#fcfcfb; --ink:#0b0b0b; --ink2:#52514e; --muted:#898781;
+  --grid:#e1e0d9; --axis:#c3c2b7; --border:rgba(11,11,11,.10);
+  --s1:#2a78d6; --s2:#1baf7a; --s3:#eda100; --s4:#008300; --s5:#4a3aa7; --s6:#e34948; --s7:#e87ba4; --s8:#eb6834;
+  --accent:#2a78d6; --accent-soft:rgba(42,120,214,.12); --bad:#d03b3b;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --page:#0d0d0d; --surface:#1a1a19; --ink:#ffffff; --ink2:#c3c2b7; --muted:#898781;
+    --grid:#2c2c2a; --axis:#383835; --border:rgba(255,255,255,.10);
+    --s1:#3987e5; --s2:#199e70; --s3:#c98500; --s4:#008300; --s5:#9085e9; --s6:#e66767; --s7:#d55181; --s8:#d95926;
+    --accent:#3987e5; --accent-soft:rgba(57,135,229,.18); --bad:#e66767;
+  }
+}
+*{box-sizing:border-box; margin:0; padding:0;}
+html{scroll-behavior:smooth;}
+body{background:var(--page); color:var(--ink); font-family:system-ui,-apple-system,"Segoe UI","Malgun Gothic",sans-serif; font-size:14px; line-height:1.5;}
+a{color:var(--accent);}
+
+header.top{position:sticky; top:0; z-index:50; background:var(--page); border-bottom:1px solid var(--border); padding:10px 20px; display:flex; align-items:center; gap:14px; flex-wrap:wrap;}
+header.top h1{font-size:17px; font-weight:700;}
+header.top .meta{color:var(--muted); font-size:12px;}
+header.top .spacer{flex:1;}
+.btn{display:inline-flex; align-items:center; gap:6px; border:1px solid var(--border); background:var(--surface); color:var(--ink); border-radius:8px; padding:6px 12px; font-size:13px; cursor:pointer; text-decoration:none;}
+.btn:hover{background:var(--accent-soft);}
+.btn.primary{background:var(--accent); border-color:var(--accent); color:#fff;}
+.btn.primary:hover{opacity:.9;}
+
+.filterbar{display:flex; align-items:center; gap:8px; flex-wrap:wrap; padding:10px 20px; border-bottom:1px solid var(--border); background:var(--page); position:sticky; top:49px; z-index:40;}
+.chip{border:1px solid var(--border); background:var(--surface); color:var(--ink2); border-radius:999px; padding:4px 12px; font-size:12.5px; cursor:pointer;}
+.chip:hover{background:var(--accent-soft);}
+.chip.on{background:var(--accent); border-color:var(--accent); color:#fff; font-weight:600;}
+.filterbar input[type=date]{border:1px solid var(--border); background:var(--surface); color:var(--ink); border-radius:8px; padding:4px 8px; font-size:12.5px; font-family:inherit;}
+.filterbar .rangeinfo{color:var(--muted); font-size:12px; margin-left:4px;}
+
+nav.pages{display:flex; gap:4px; flex-wrap:wrap; padding:10px 20px 0; max-width:1240px; margin:0 auto;}
+.ptab{border:1px solid var(--border); border-bottom:none; background:var(--surface); color:var(--ink2); border-radius:10px 10px 0 0; padding:8px 18px; font-size:13.5px; cursor:pointer; font-weight:600;}
+.ptab:hover{background:var(--accent-soft); color:var(--ink);}
+.ptab.on{background:var(--accent); border-color:var(--accent); color:#fff;}
+.selbox{border:1px solid var(--border); background:var(--surface); color:var(--ink); border-radius:8px; padding:5px 10px; font-size:13px; font-family:inherit;}
+table.list tr.agrow{cursor:pointer;}
+table.list tr.agrow:hover td{background:var(--accent-soft);}
+table.list tr.agrow.sel td{background:var(--accent-soft); font-weight:600;}
+.sfld{font-size:11.5px; color:var(--muted); display:inline-block;}
+.sfld input, .sfld select{margin-top:3px;}
+table.list tr.srow{cursor:pointer;}
+table.list tr.srow:hover td{background:var(--accent-soft);}
+table.list tr.srow.sel td{background:var(--accent-soft);}
+
+main{max-width:1240px; margin:0 auto; padding:16px 20px 60px;}
+section{margin-top:28px;}
+section > h2{font-size:15px; font-weight:700; margin-bottom:4px;}
+section > .sub{color:var(--muted); font-size:12.5px; margin-bottom:12px;}
+
+.kpis{display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:12px;}
+.kpi{background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:14px 16px;}
+.kpi .k-label{color:var(--ink2); font-size:12.5px;}
+.kpi .k-value{font-size:30px; font-weight:700; letter-spacing:-.5px; margin-top:2px;}
+.kpi .k-value small{font-size:15px; font-weight:600; color:var(--ink2); margin-left:2px;}
+.kpi .k-sub{color:var(--muted); font-size:12px; margin-top:2px;}
+.kpi .k-sub b{color:var(--ink2); font-weight:600;}
+
+.grid{display:grid; gap:12px;}
+.grid.c2{grid-template-columns:repeat(2,minmax(0,1fr));}
+.grid.c3{grid-template-columns:repeat(3,minmax(0,1fr));}
+@media (max-width:980px){ .grid.c3{grid-template-columns:repeat(2,minmax(0,1fr));} }
+@media (max-width:700px){ .grid.c2,.grid.c3{grid-template-columns:1fr;} }
+.card{background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:16px;}
+.card h3{font-size:13.5px; font-weight:600; margin-bottom:2px;}
+.card .desc{color:var(--muted); font-size:12px; margin-bottom:10px;}
+.card .empty{color:var(--muted); font-size:13px; padding:30px 0; text-align:center;}
+.card details{margin-top:8px; border-top:1px solid var(--grid); padding-top:6px;}
+.card details summary{color:var(--muted); font-size:12px; cursor:pointer;}
+.card details table{width:100%; border-collapse:collapse; font-size:12px; margin-top:6px;}
+.card details th,.card details td{text-align:left; padding:3px 8px 3px 0; border-bottom:1px solid var(--grid); color:var(--ink2); font-variant-numeric:tabular-nums;}
+.card details th{color:var(--muted); font-weight:600;}
+svg text{font-family:inherit;}
+
+.legend{display:flex; gap:12px; flex-wrap:wrap; margin-bottom:8px;}
+.legend .li{display:inline-flex; align-items:center; gap:5px; font-size:12px; color:var(--ink2);}
+.legend .sw{width:10px; height:10px; border-radius:3px; display:inline-block;}
+
+.hrow{display:flex; align-items:center; gap:8px; padding:3px 0; border-radius:6px;}
+.hrow:hover{background:var(--accent-soft);}
+.hlabel{flex:0 0 150px; font-size:12.5px; color:var(--ink2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; text-align:right;}
+.htrack{flex:1; height:16px; position:relative;}
+.hfill{height:16px; border-radius:0 4px 4px 0; min-width:2px;}
+.hval{flex:0 0 74px; font-size:12px; color:var(--ink); font-variant-numeric:tabular-nums;}
+.hval .pct{color:var(--muted);}
+
+table.list{width:100%; border-collapse:collapse; font-size:13px;}
+table.list th{color:var(--muted); font-weight:600; text-align:left; padding:6px 10px 6px 0; border-bottom:1px solid var(--axis); font-size:12px;}
+table.list td{padding:6px 10px 6px 0; border-bottom:1px solid var(--grid); vertical-align:top;}
+table.list td.num{font-variant-numeric:tabular-nums;}
+.scorechip{display:inline-block; min-width:26px; text-align:center; border-radius:6px; padding:1px 6px; font-weight:700; font-size:12px; color:#fff; background:var(--bad);}
+
+.exports{display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:12px;}
+.exp{background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:16px; display:flex; flex-direction:column; gap:8px;}
+.exp .name{font-weight:700; font-size:14px;}
+.exp .desc{color:var(--muted); font-size:12.5px; flex:1;}
+.exp .row{display:flex; gap:8px;}
+.rawlinks{margin-top:14px; color:var(--muted); font-size:12.5px;}
+.rawlinks a{margin-right:10px;}
+
+#tooltip{position:fixed; z-index:100; pointer-events:none; background:var(--surface); color:var(--ink); border:1px solid var(--border); border-radius:8px; padding:7px 10px; font-size:12.5px; box-shadow:0 4px 14px rgba(0,0,0,.18); display:none; max-width:320px;}
+#tooltip .tt-title{color:var(--muted); font-size:11.5px; margin-bottom:2px;}
+#tooltip .tt-row{display:flex; align-items:center; gap:6px;}
+#tooltip .sw{width:9px; height:9px; border-radius:2px; display:inline-block;}
+#tooltip b{font-variant-numeric:tabular-nums;}
+
+#overlay{position:fixed; inset:0; background:var(--page); z-index:200; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px;}
+#overlay .sp{width:34px; height:34px; border:3px solid var(--grid); border-top-color:var(--accent); border-radius:50%; animation:spin .8s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg)}}
+#overlay ul{list-style:none; font-size:13px; color:var(--ink2); min-width:260px;}
+#overlay li{padding:2px 0;}
+#overlay li .st{float:right; color:var(--muted);}
+#overlay li.done .st{color:var(--s4);}
+#overlay li.fail .st{color:var(--bad);}
+#errbar{display:none; margin:12px 20px 0; max-width:1200px; border:1px solid var(--bad); background:var(--surface); color:var(--ink); border-radius:10px; padding:10px 14px; font-size:13px;}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <h1>📞 고객센터 인입 대시보드</h1>
+  <span class="meta" id="updatedAt"></span>
+  <span class="spacer"></span>
+  <button class="btn" id="btnRefresh">↻ 데이터 새로고침</button>
+  <a class="btn" id="lnkSheet" target="_blank" rel="noopener">구글시트 열기 ↗</a>
+</header>
+
+<div class="filterbar" id="filterbar">
+  <span style="font-size:12.5px;color:var(--muted);">기간</span>
+  <button class="chip" data-preset="month">이번 달</button>
+  <button class="chip on" data-preset="30">최근 30일</button>
+  <button class="chip" data-preset="90">최근 90일</button>
+  <button class="chip" data-preset="year">올해</button>
+  <button class="chip" data-preset="all">전체</button>
+  <input type="date" id="dtFrom"> ~ <input type="date" id="dtTo">
+  <button class="chip" id="btnApply">적용</button>
+  <span class="rangeinfo" id="rangeInfo"></span>
+</div>
+
+<nav class="pages" id="pageNav">
+  <button class="ptab on" data-page="main">📊 메인</button>
+  <button class="ptab" data-page="inflow">📈 인입 분석</button>
+  <button class="ptab" data-page="agents">👤 점검자 분석</button>
+  <button class="ptab" data-page="search">🔍 검색</button>
+  <button class="ptab" data-page="reports">📁 보고서</button>
+</nav>
+
+<div id="errbar"></div>
+
+<main>
+<!-- ═══════════ 메인: 전체 요약 ═══════════ -->
+<div class="page" id="page-main">
+  <section id="sec-kpi">
+    <div class="kpis" id="kpis"></div>
+    <div id="kpiDetail" style="margin-top:12px;"></div>
+  </section>
+
+  <section id="sec-overview">
+    <h2>전체 요약</h2>
+    <div class="sub">seed 로우데이터 기준 · 접수일 기준 집계 · 상단 기간 필터 적용</div>
+    <div class="grid c2">
+      <div class="card" style="grid-column:1/-1;">
+        <h3 id="trendTitle">인입 추이</h3>
+        <div class="desc">접수 건수</div>
+        <div id="chTrend"></div>
+      </div>
+      <div class="card">
+        <h3>처리결과 분포</h3>
+        <div class="desc">건수 및 비중</div>
+        <div id="chResult"></div>
+      </div>
+      <div class="card">
+        <h3>MSO별 인입</h3>
+        <div class="desc">건수 및 비중</div>
+        <div id="chMso"></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="sec-review">
+    <h2>고객 리뷰</h2>
+    <div class="sub">seed(정산용) 리뷰점수 기준 · 리뷰없음 제외</div>
+    <div class="card">
+      <h3>저점 리뷰 (6점 이하)</h3>
+      <div class="desc">최근순 최대 20건 — 불만 요인 파악용</div>
+      <div id="lowReviews"></div>
+    </div>
+  </section>
+
+</div>
+
+<!-- ═══════════ 인입 분석 ═══════════ -->
+<div class="page" id="page-inflow" hidden>
+  <section>
+    <h2>인입량 추이</h2>
+    <div class="sub">seed 접수일 기준 · 상단 기간 필터 적용 · SO 필터는 이 페이지의 추이·시간대·처리결과에 함께 적용됩니다 (CNM 계열은 하나로 통합)</div>
+    <div class="card">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px;flex-wrap:wrap;">
+        <span style="color:var(--muted);font-size:12.5px;">단위</span>
+        <button class="chip granBtn" data-g="month">월</button>
+        <button class="chip granBtn" data-g="week">주</button>
+        <button class="chip on granBtn" data-g="day">일</button>
+        <span style="color:var(--muted);font-size:12.5px;margin-left:10px;">SO(상품군)</span>
+        <select id="inflowSo" class="selbox"><option value="">전체</option></select>
+      </div>
+      <div id="chInTrend"></div>
+    </div>
+  </section>
+
+  <section id="sec-pattern">
+    <h2>인입 시간대</h2>
+    <div class="sub">시간대·요일별 접수 분포 — 인력 배치 참고용</div>
+    <div class="grid c2">
+      <div class="card">
+        <h3>시간대별 인입</h3>
+        <div class="desc">접수시간 기준</div>
+        <div id="chHour"></div>
+      </div>
+      <div class="card">
+        <h3>요일별 인입</h3>
+        <div class="desc">접수일 기준</div>
+        <div id="chDow"></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="sec-type">
+    <h2>인입 유형</h2>
+    <div class="sub">상품군(SO) 분포 — seed 기준 · CNM 계열 통합</div>
+    <div class="card">
+      <h3>SO(상품군)별 인입 Top 12</h3>
+      <div class="desc">건수 및 비중</div>
+      <div id="chSo"></div>
+    </div>
+  </section>
+
+  <section id="sec-jochi">
+    <h2>증상 · 원인 · 조치</h2>
+    <div class="sub">조치사항 로우데이터 기준 (완료날짜 필터) · 한 접수에 여러 조치가 있을 수 있음</div>
+    <div class="grid c3">
+      <div class="card"><h3>증상 Top 10</h3><div class="desc">증상 대분류</div><div id="chSym"></div></div>
+      <div class="card"><h3>원인 Top 10</h3><div class="desc">원인 대분류</div><div id="chCause"></div></div>
+      <div class="card"><h3>조치 Top 10</h3><div class="desc">조치 대분류</div><div id="chAct"></div></div>
+    </div>
+    <div class="grid c3" style="margin-top:12px;">
+      <div class="card"><h3>증상 상세 (증상2) Top 10</h3><div class="desc">증상 소분류</div><div id="chSym2"></div></div>
+      <div class="card"><h3>원인 상세 (원인2) Top 10</h3><div class="desc">원인 소분류</div><div id="chCause2"></div></div>
+      <div class="card"><h3>조치 상세 (조치2) Top 10</h3><div class="desc">조치 소분류</div><div id="chAct2"></div></div>
+    </div>
+  </section>
+
+  <section id="sec-compare">
+    <h2>조건 비교 (A vs B)</h2>
+    <div class="sub">기간·SO·MSO 조건을 달리해 두 집단의 인입을 비교합니다 · 상단 기간 필터와 무관하게 동작</div>
+    <div class="card" style="margin-bottom:12px;">
+      <div style="display:flex;gap:26px;flex-wrap:wrap;align-items:flex-end;">
+        <div>
+          <div style="font-size:12px;font-weight:700;color:var(--s1);margin-bottom:4px;">조건 A</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;">
+            <label class="sfld">기간<br><input type="date" id="cAFrom" class="selbox"> ~ <input type="date" id="cATo" class="selbox"></label>
+            <label class="sfld">SO<br><select id="cASo" class="selbox" style="max-width:150px;"><option value="">전체</option></select></label>
+            <label class="sfld">MSO<br><select id="cAMso" class="selbox"><option value="">전체</option></select></label>
+          </div>
+        </div>
+        <div>
+          <div style="font-size:12px;font-weight:700;color:var(--s3);margin-bottom:4px;">조건 B</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;">
+            <label class="sfld">기간<br><input type="date" id="cBFrom" class="selbox"> ~ <input type="date" id="cBTo" class="selbox"></label>
+            <label class="sfld">SO<br><select id="cBSo" class="selbox" style="max-width:150px;"><option value="">전체</option></select></label>
+            <label class="sfld">MSO<br><select id="cBMso" class="selbox"><option value="">전체</option></select></label>
+          </div>
+        </div>
+        <button class="chip" id="cApply" style="font-weight:700;">비교</button>
+      </div>
+    </div>
+    <div class="kpis" id="cmpKpis" style="margin-bottom:12px;"></div>
+    <div class="grid c2">
+      <div class="card"><h3>일별 인입 추이</h3><div class="desc">각 조건의 시작일부터 n일차 기준 정렬</div><div id="chCmpTrend"></div></div>
+      <div class="card"><h3>시간대별 인입</h3><div class="desc">접수시간 기준</div><div id="chCmpHour"></div></div>
+      <div class="card"><h3>처리결과 분포</h3><div class="desc">건수 비교</div><div id="chCmpResult"></div></div>
+      <div class="card"><h3>요일별 인입</h3><div class="desc">접수일 기준</div><div id="chCmpDow"></div></div>
+    </div>
+  </section>
+</div>
+
+<!-- ═══════════ 점검자 분석 ═══════════ -->
+<div class="page" id="page-agents" hidden>
+  <section>
+    <h2>점검자 분석</h2>
+    <div class="sub">점검량 = seed(인정 O) + remote(2차) + 컴퓨터주치의 + 실시간원격주치의 · 리뷰점수·선택동의율은 운영 산식 기준</div>
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap;">
+      <span style="color:var(--muted);font-size:12.5px;">조회 월</span>
+      <select id="agentYm" class="selbox"></select>
+    </div>
+    <div class="kpis" id="agentKpis" style="margin-bottom:14px;"></div>
+    <div class="card" style="margin-bottom:12px;">
+      <h3>점검자별 요약</h3>
+      <div class="desc">체크박스로 분석 대상 인원을 고르면 위 요약과 아래 차트·평균 비교에 반영됩니다 · 행을 클릭하면 해당 점검자 상세 분석으로 이동</div>
+      <div id="agentTable"></div>
+    </div>
+    <div class="grid c2">
+      <div class="card"><h3>점검량</h3><div class="desc">선택 인원 · 4개 서비스 합산</div><div id="chAgVol"></div></div>
+      <div class="card"><h3>리뷰점수</h3><div class="desc">선택 인원 · 운영 산식 (점수합 ÷ 완료건)</div><div id="chAgScore"></div></div>
+      <div class="card"><h3>선택동의율</h3><div class="desc">선택 인원 · 동의 ÷ 대상</div><div id="chAgConsent"></div></div>
+      <div class="card"><h3>M2 설치율</h3><div class="desc">선택 인원 · 설치+설치후삭제 ÷ 완료건 (LGU+ 한정)</div><div id="chAgM2"></div></div>
+    </div>
+
+    <div class="card" style="margin-top:12px;" id="agentDetailCard">
+      <h3>점검자 상세 분석 — 선택 인원 평균과 비교</h3>
+      <div class="desc">실선 = 선택 점검자, 점선 = 표에서 체크된 인원들의 평균</div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:10px 0 12px;">
+        <span style="color:var(--muted);font-size:12.5px;">점검자</span>
+        <select id="agentSelBox" class="selbox"></select>
+        <span style="color:var(--muted);font-size:12.5px;margin-left:10px;">단위</span>
+        <button class="chip dgranBtn on" data-g="month">월</button>
+        <button class="chip dgranBtn" data-g="week">주</button>
+        <button class="chip dgranBtn" data-g="day">일</button>
+        <span style="color:var(--muted);font-size:12.5px;margin-left:10px;">기간</span>
+        <input type="date" id="dFrom" class="selbox"> ~ <input type="date" id="dTo" class="selbox">
+        <button class="chip" id="dApply">적용</button>
+        <button class="chip" id="dReset">초기화</button>
+        <span class="rangeinfo" id="dRangeInfo"></span>
+      </div>
+      <div id="agentDetailSummary" class="desc" style="margin-bottom:10px;"></div>
+      <div style="display:flex;gap:24px;flex-wrap:wrap;align-items:flex-start;margin-bottom:20px;">
+        <div style="flex:0 0 400px;max-width:100%;">
+          <h3 style="font-size:13.5px;color:var(--ink);margin-bottom:6px;">🎯 종합 역량 (조회 월 · 전체 점검자 평균 = 100%)</h3>
+          <div id="chDRadar"></div>
+        </div>
+        <div style="flex:1;min-width:300px;">
+          <h3 style="font-size:13.5px;color:var(--ink);margin-bottom:6px;">지표 상세</h3>
+          <div id="dRadarTable"></div>
+        </div>
+      </div>
+      <div class="grid c2" style="row-gap:22px;">
+        <div><h3 style="font-size:13.5px;color:var(--ink);margin-bottom:6px;">📦 처리건수 (점검량)</h3><div id="chDVol"></div></div>
+        <div><h3 style="font-size:13.5px;color:var(--ink);margin-bottom:6px;">⭐ 리뷰점수 (점수합 ÷ 완료건)</h3><div id="chDScore"></div></div>
+        <div><h3 style="font-size:13.5px;color:var(--ink);margin-bottom:6px;">✅ 선택동의율 (동의 ÷ 대상)</h3><div id="chDConsent"></div></div>
+        <div><h3 style="font-size:13.5px;color:var(--ink);margin-bottom:6px;">🔧 M2 설치율 (설치+설치후삭제 ÷ 완료건 · LGU+)</h3><div id="chDM2"></div></div>
+      </div>
+      <div class="grid c2" style="margin-top:18px;row-gap:22px;">
+        <div><h3 style="font-size:13.5px;color:var(--ink);margin-bottom:6px;">🏷️ SO별 처리건수 <span id="dSoInfo" style="font-weight:400;color:var(--muted);font-size:12px;"></span></h3><div id="chDSo"></div></div>
+        <div><h3 style="font-size:13.5px;color:var(--ink);margin-bottom:6px;">🕐 시간별 처리건수 <span style="font-weight:400;color:var(--muted);font-size:12px;">완료시각(H·I열) 기준</span></h3><div id="chDHour"></div></div>
+        <div><h3 style="font-size:13.5px;color:var(--ink);margin-bottom:6px;">📅 요일별 처리건수 <span style="font-weight:400;color:var(--muted);font-size:12px;">완료일 기준</span></h3><div id="chDDow"></div></div>
+        <div><h3 style="font-size:13.5px;color:var(--ink);margin-bottom:6px;">📋 처리결과 분포</h3><div id="chDResult"></div></div>
+      </div>
+      <div class="grid c3" style="margin-top:18px;">
+        <div><h3 style="font-size:13.5px;color:var(--ink);margin-bottom:6px;">🩺 증상 선택 비중</h3><div id="chDSym"></div></div>
+        <div><h3 style="font-size:13.5px;color:var(--ink);margin-bottom:6px;">🔍 원인 선택 비중</h3><div id="chDCause"></div></div>
+        <div><h3 style="font-size:13.5px;color:var(--ink);margin-bottom:6px;">🛠️ 조치 선택 비중</h3><div id="chDAct"></div></div>
+      </div>
+      <div style="margin-top:16px;">
+        <h3 style="font-size:13.5px;color:var(--ink);margin-bottom:2px;">💬 3점 미만 리뷰 <span id="dLowInfo" style="font-weight:400;color:var(--muted);font-size:12px;"></span></h3>
+        <div class="desc">선택 점검자가 받은 저점 리뷰 · 선택 기간 · 최신순 최대 20건</div>
+        <div id="dLowReviews"></div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<!-- ═══════════ 로우데이터 검색 ═══════════ -->
+<div class="page" id="page-search" hidden>
+  <section>
+    <h2>로우데이터 검색</h2>
+    <div class="sub">seed + seed(정산용)을 레포트번호로 병합 · 모든 조건은 동시에 적용(AND)됩니다</div>
+    <div class="card" style="margin-bottom:12px;">
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:10px;">
+        <label class="sfld">기간<br><input type="date" id="sFrom" class="selbox"> ~ <input type="date" id="sTo" class="selbox"></label>
+        <label class="sfld">점검자명<br><input type="text" id="sAgent" class="selbox" placeholder="예: 안정" style="width:110px;"></label>
+        <label class="sfld">처리결과<br><select id="sResult" class="selbox"><option value="">전체</option></select></label>
+        <label class="sfld">MSO<br><select id="sMso" class="selbox"><option value="">전체</option></select></label>
+        <label class="sfld">SO<br><select id="sSo" class="selbox" style="max-width:170px;"><option value="">전체</option></select></label>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
+        <label class="sfld">고객명<br><input type="text" id="sCust" class="selbox" placeholder="고객명" style="width:110px;"></label>
+        <label class="sfld">가입번호<br><input type="text" id="sCustNo" class="selbox" placeholder="가입번호" style="width:130px;"></label>
+        <label class="sfld">레포트번호<br><input type="text" id="sRpt" class="selbox" placeholder="레포트번호" style="width:170px;"></label>
+        <label class="sfld">통합 검색<br><input type="text" id="sAll" class="selbox" placeholder="요청내용·리뷰 포함 모든 항목" style="width:190px;"></label>
+        <button class="chip" id="sReset">초기화</button>
+      </div>
+    </div>
+    <div class="card">
+      <h3>검색 결과 <span id="sCount" style="font-weight:400;color:var(--muted);font-size:12.5px;"></span></h3>
+      <div class="desc">최신순 · 최대 300건 표시 · 행을 클릭하면 상세 내용(요청내용·리뷰)이 열립니다</div>
+      <div id="sResults" style="overflow-x:auto;"></div>
+    </div>
+    <div id="sDetail" style="margin-top:12px;"></div>
+  </section>
+</div>
+
+<!-- ═══════════ 보고서 ═══════════ -->
+<div class="page" id="page-reports" hidden>
+  <section id="sec-export">
+    <h2>보고서 내보내기</h2>
+    <div class="sub">기존 보고 파일의 서식을 유지한 채 최신 값으로 교체해 다운로드합니다</div>
+    <div class="exports" id="exports"></div>
+    <div class="rawlinks" id="rawlinks"></div>
+  </section>
+</div>
+</main>
+
+<div id="tooltip"></div>
+<div id="overlay">
+  <div class="sp"></div>
+  <div style="font-weight:600;">구글시트에서 데이터를 불러오는 중…</div>
+  <ul id="loadList"></ul>
+</div>
+
+<script>
+'use strict';
+const SHEET_ID = '1SQtbpxZn4Nuc3nhWUIpeJpe-9Rm_hmbv8VU8wednstw';
+const SHEET_URL = 'https://docs.google.com/spreadsheets/d/' + SHEET_ID;
+document.getElementById('lnkSheet').href = SHEET_URL + '/edit';
+
+/* ---------- 탭 정의 ----------
+   시트에 기본 필터가 걸려 있어도 전체 행을 받도록 export CSV 엔드포인트 사용 (gviz는 필터로 숨겨진 행을 제외함) */
+const RAW_TABS = {
+  seed:     { gid: 2033774405, label: 'seed' },
+  review:   { gid: 1124004812, label: 'seed(정산용) 리뷰' },
+  jochi:    { gid: 271896498,  label: '조치사항' },
+  realtime: { gid: 1394642031, label: '실시간원격주치의' },
+  computer: { gid: 1349881106, label: '컴퓨터주치의' },
+  remote:   { gid: 1268243589, label: 'remote' },
+  status:   { gid: 1844693251, label: '현황(근태)' },
+};
+const REPORT_TABS = [
+  { name: '일보',       gid: 1179299741, desc: '「기술 실적 관리」 파일 그대로(현황요약 서식·수식 유지) + 연간실적상세에 최신 값 반영' },
+  { name: '홈보고',     gid: 1888068093, desc: '「LG U+ 원격점검현황」 파일 서식 유지 — 통계 값 갱신 + 고객만족후기(HOME, 날짜 내림차순) 교체' },
+  { name: '소호보고',   gid: 1990450613, desc: '「LGU+소호 원격점검현황」 파일 서식 유지 — 전체현황 값 갱신 + 만족후기(SOHO·SME, 날짜 내림차순) 교체' },
+];
+const RAW_LINK_TABS = [
+  ['seed', 2033774405], ['seed(정산용)', 1124004812], ['조치사항', 271896498],
+  ['실시간원격주치의', 1394642031], ['컴퓨터주치의', 1349881106], ['remote', 1268243589],
+];
+
+/* ---------- 유틸 ---------- */
+const $ = id => document.getElementById(id);
+const fmt = n => (n == null || isNaN(n)) ? '-' : Math.round(n).toLocaleString('ko-KR');
+const fmt1 = n => (n == null || isNaN(n)) ? '-' : (Math.round(n * 10) / 10).toLocaleString('ko-KR', { minimumFractionDigits: 1 });
+const pad2 = n => String(n).padStart(2, '0');
+const DOW = ['일', '월', '화', '수', '목', '금', '토'];
+
+function parseDateStr(s) { // 'YYYY-MM-DD' 또는 null
+  if (!s) return null;
+  const m = /^(\d{4})[.\-\/]\s*(\d{1,2})[.\-\/]\s*(\d{1,2})/.exec(s.trim());
+  if (!m) return null;
+  const ds = m[1] + '-' + pad2(+m[2]) + '-' + pad2(+m[3]);
+  return ds >= '2000-01-01' ? ds : null; // 1899-12-30 등 수식 잔여값 제외
+}
+function parseHour(s) {
+  if (!s) return null;
+  s = s.trim();
+  let pm = /오후/.test(s);
+  const m = /(\d{1,2}):/.exec(s);
+  if (!m) return null;
+  let h = +m[1];
+  if (pm && h < 12) h += 12;
+  return (h >= 0 && h <= 23) ? h : null;
+}
+function parseNum(s) {
+  if (s == null || s === '') return null;
+  const n = parseFloat(String(s).replace(/,/g, ''));
+  return isNaN(n) ? null : n;
+}
+function dsToDate(ds) { const [y, m, d] = ds.split('-').map(Number); return new Date(y, m - 1, d); }
+function dateToDs(d) { return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()); }
+function addDays(d, n) { const x = new Date(d); x.setDate(x.getDate() + n); return x; }
+function monthLabel(ym) { return ym.slice(2, 4) + '.' + ym.slice(5, 7); }
+function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+
+/* ---------- CSV 로더 ---------- */
+async function loadTab(key) {
+  const { gid } = RAW_TABS[key];
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), 120000);
+  try {
+    const res = await fetch(SHEET_URL + '/export?format=csv&gid=' + gid, { signal: ctl.signal });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    return parseCSV(await res.text());
+  } finally { clearTimeout(timer); }
+}
+
+function parseCSV(text) {
+  const rows = []; let row = [], cur = '', inQ = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inQ) {
+      if (ch === '"') { if (text[i + 1] === '"') { cur += '"'; i++; } else inQ = false; }
+      else cur += ch;
+    } else {
+      if (ch === '"') inQ = true;
+      else if (ch === ',') { row.push(cur); cur = ''; }
+      else if (ch === '\n') { row.push(cur); rows.push(row); row = []; cur = ''; }
+      else if (ch !== '\r') cur += ch;
+    }
+  }
+  if (cur !== '' || row.length) { row.push(cur); rows.push(row); }
+  return rows;
+}
+
+/* 헤더명으로 열 위치 탐색(레이아웃 변경 대비), 실패 시 기본 인덱스 사용 */
+function colIdx(header, name, fallback) {
+  const i = header.findIndex(h => h.trim() === name);
+  return i >= 0 ? i : fallback;
+}
+
+/* ---------- 데이터 저장소 ---------- */
+const DATA = { seed: [], review: [], jochi: [], realtime: [], computer: [], remote: [], status: [], sjMap: new Map(), attend: new Map() };
+
+function normalize(key, rows) {
+  if (!rows.length) { DATA[key] = []; return; }
+  const H = rows[0].map(h => String(h || ''));
+  const body = rows.slice(1);
+  const out = [];
+  const S = (r, i) => (r[i] || '').trim();
+  const bad = v => !v || v.startsWith('#');
+
+  if (key === 'seed') {
+    const iDate = colIdx(H, '접수일', 4), iTime = colIdx(H, '접수시간', 5), iAgent = colIdx(H, '점검자명', 3), iRes = colIdx(H, '처리결과', 6);
+    for (const r of body) {
+      const date = parseDateStr(S(r, iDate)); if (!date) continue;
+      const so = S(r, 1) || '기타';
+      out.push({
+        mso: S(r, 0) || '기타', so, soG: /^CNM/i.test(so) ? 'CNM' : so, agent: S(r, iAgent), date,
+        hour: parseHour(S(r, iTime)), result: S(r, iRes) || '미입력',
+        // 점검자 분석용: J=리뷰점수, U/V=동의, AF=인정, AG=점검유형, AL=제외사유, AM/AN=선택동의 대상, P=설치여부(M2)
+        score: parseNum(S(r, 9)), u: S(r, 20), v: S(r, 21), p: S(r, 15), af: S(r, 31), ag: S(r, 32), al: S(r, 37), am: S(r, 38), an: S(r, 39),
+        // 검색용: C=레포트번호, F=접수시간, M=고객명, N=가입번호 / 처리시각: H=완료일자, I=완료시간
+        rpt: S(r, 2), time: S(r, 5), cust: S(r, 12), custNo: S(r, 13),
+        cdate: parseDateStr(S(r, 7)), chour: parseHour(S(r, 8)),
+      });
+    }
+  } else if (key === 'review') {
+    const iDate = colIdx(H, '접수일자', 3), iSo = colIdx(H, 'SO', 1), iScore = colIdx(H, '리뷰점수', 19), iText = colIdx(H, '리뷰내용', 20);
+    const iRpt = colIdx(H, '접수번호', 2), iCenter = colIdx(H, '센터명', 5), iTeam = colIdx(H, '소속팀', 6), iCoun = colIdx(H, '상담사', 7), iProd = colIdx(H, '사용상품', 10), iReq = colIdx(H, '요청내용', 14), iResJ = colIdx(H, '처리결과', 15);
+    const sj = new Map(); // 레포트번호 → seed(정산용) 상세 (검색 병합용)
+    for (const r of body) {
+      const date = parseDateStr(S(r, iDate)); if (!date) continue;
+      const rpt = S(r, iRpt);
+      if (rpt) sj.set(rpt, { center: S(r, iCenter), team: S(r, iTeam), counselor: S(r, iCoun), product: S(r, iProd), req: S(r, iReq), resultJ: S(r, iResJ), score: parseNum(S(r, iScore)), rtext: S(r, iText) });
+      const score = parseNum(S(r, iScore)); if (score == null) continue;
+      out.push({ date, so: S(r, iSo), score, text: S(r, iText) });
+    }
+    DATA.sjMap = sj;
+  } else if (key === 'jochi') {
+    const iDate = colIdx(H, '완료날짜', 1), iAgent = colIdx(H, '점검자', 4), iSym = colIdx(H, '증상1', 8), iCause = colIdx(H, '원인1', 10), iAct = colIdx(H, '조치1', 12);
+    const iSym2 = colIdx(H, '증상2', 9), iCause2 = colIdx(H, '원인2', 11), iAct2 = colIdx(H, '조치2', 13);
+    for (const r of body) {
+      const date = parseDateStr(S(r, iDate)); if (!date) continue;
+      const sym = S(r, iSym), cause = S(r, iCause), act = S(r, iAct);
+      const sym2 = S(r, iSym2), cause2 = S(r, iCause2), act2 = S(r, iAct2);
+      out.push({
+        date, agent: S(r, iAgent),
+        sym: bad(sym) ? null : sym, cause: bad(cause) ? null : cause, act: bad(act) ? null : act,
+        sym2: bad(sym2) ? null : sym2, cause2: bad(cause2) ? null : cause2, act2: bad(act2) ? null : act2,
+      });
+    }
+  } else if (key === 'status') {
+    // 현황 탭: 이름=C열(idx2), 근태(지각)=AG열(idx32), 시트 9~22행 참조
+    const att = new Map();
+    for (let ri = 8; ri <= 21 && ri < rows.length; ri++) {
+      const r = rows[ri] || [];
+      const name = (r[2] || '').trim();
+      if (!name || name === '이름') continue;
+      att.set(name, parseNum((r[32] || '').trim()) || 0);
+    }
+    DATA.attend = att;
+  } else if (key === 'realtime') {
+    const iDate = colIdx(H, '처리일자', 7), iContent = colIdx(H, '처리내용', 1), iTeam = colIdx(H, '소속', 13), iAgent = colIdx(H, '처리자', 5);
+    for (const r of body) {
+      const date = parseDateStr(S(r, iDate)); if (!date) continue;
+      out.push({ date, content: S(r, iContent) || '기타', team: S(r, iTeam), agent: S(r, iAgent) });
+    }
+  } else if (key === 'computer') {
+    const iDate = colIdx(H, '날짜', 0), iName = colIdx(H, '이름', 1), iType = colIdx(H, '점검타입', 2);
+    for (const r of body) {
+      const date = parseDateStr(S(r, iDate)); if (!date) continue;
+      out.push({ date, name: S(r, iName), type: S(r, iType), cnt: parseNum(S(r, 3)) || 0 });
+    }
+  } else if (key === 'remote') {
+    const iDate = colIdx(H, '접수일자', 0), iCh = colIdx(H, '인입방식', 4), iMso = colIdx(H, 'MSO', 5), iMe = colIdx(H, '처리', 13);
+    const iCdate = colIdx(H, '완료일자', 2), iA2 = colIdx(H, '2차', 14);
+    for (const r of body) {
+      const date = parseDateStr(S(r, iDate));
+      const cdate = parseDateStr(S(r, iCdate));
+      if (!date && !cdate) continue; // 접수일자가 없어도 완료일자가 있으면 점검자 집계에 포함 (운영 산식과 동일)
+      out.push({ date, channel: S(r, iCh) || '미입력', mso: S(r, iMso) || '미입력', method: S(r, iMe) || '미입력', cdate, cym: cdate ? cdate.slice(0, 7) : null, agent2: S(r, iA2) });
+    }
+  }
+  DATA[key] = out;
+}
+
+/* ---------- 기간 필터 ---------- */
+const state = { from: null, to: null, preset: '30' };
+
+function applyPreset(p) {
+  const today = new Date();
+  state.preset = p;
+  if (p === 'all') { state.from = null; state.to = null; }
+  else if (p === 'month') { state.from = dateToDs(new Date(today.getFullYear(), today.getMonth(), 1)); state.to = dateToDs(today); }
+  else if (p === 'year') { state.from = today.getFullYear() + '-01-01'; state.to = dateToDs(today); }
+  else { state.from = dateToDs(addDays(today, -(+p) + 1)); state.to = dateToDs(today); }
+  syncFilterUI();
+  renderAll();
+}
+function syncFilterUI() {
+  document.querySelectorAll('.chip[data-preset]').forEach(ch => ch.classList.toggle('on', ch.dataset.preset === state.preset));
+  $('dtFrom').value = state.from || '';
+  $('dtTo').value = state.to || '';
+  $('rangeInfo').textContent = state.from ? state.from + ' ~ ' + state.to : '전체 기간';
+}
+function inRange(ds) { return (!state.from || ds >= state.from) && (!state.to || ds <= state.to); }
+function filt(arr) { return (state.from || state.to) ? arr.filter(r => inRange(r.date)) : arr; }
+
+/* ---------- 집계 유틸 ---------- */
+function countBy(arr, keyFn) {
+  const m = new Map();
+  for (const r of arr) { const k = keyFn(r); if (k == null || k === '') continue; m.set(k, (m.get(k) || 0) + 1); }
+  return m;
+}
+function topN(map, n, foldOther = true) {
+  const items = [...map.entries()].sort((a, b) => b[1] - a[1]);
+  if (!foldOther || items.length <= n) return items.slice(0, n).map(([label, value]) => ({ label, value }));
+  const head = items.slice(0, n).map(([label, value]) => ({ label, value }));
+  const rest = items.slice(n).reduce((s, [, v]) => s + v, 0);
+  if (rest > 0) head.push({ label: '기타 (' + (items.length - n) + '종)', value: rest });
+  return head;
+}
+function niceMax(v) {
+  if (v <= 0) return 1;
+  const p = Math.pow(10, Math.floor(Math.log10(v)));
+  for (const s of [1, 2, 2.5, 5, 10]) { if (v <= s * p) return s * p; }
+  return 10 * p;
+}
+
+/* ---------- 툴팁 ---------- */
+const tt = $('tooltip');
+function showTT(html, ev) {
+  tt.innerHTML = html; tt.style.display = 'block';
+  const pad = 14, w = tt.offsetWidth, h = tt.offsetHeight;
+  let x = ev.clientX + pad, y = ev.clientY + pad;
+  if (x + w > innerWidth - 8) x = ev.clientX - w - pad;
+  if (y + h > innerHeight - 8) y = ev.clientY - h - pad;
+  tt.style.left = x + 'px'; tt.style.top = y + 'px';
+}
+function hideTT() { tt.style.display = 'none'; }
+
+/* ---------- 차트: 가로 막대 ---------- */
+function hbar(el, items, opts = {}) {
+  const { color = 'var(--s1)', unit = '건', fmtFn = fmt, showPct = true } = opts;
+  el = typeof el === 'string' ? $(el) : el;
+  if (!items.length) { el.innerHTML = '<div class="empty">선택 기간에 데이터가 없습니다</div>'; return; }
+  const total = items.reduce((s, i) => s + i.value, 0);
+  const max = Math.max(...items.map(i => i.value));
+  el.innerHTML = items.map((it, i) => {
+    const w = max > 0 ? (it.value / max * 100) : 0;
+    const pct = total > 0 ? (it.value / total * 100) : 0;
+    return '<div class="hrow" data-i="' + i + '"><div class="hlabel" title="' + esc(it.label) + '">' + esc(it.label) + '</div>' +
+      '<div class="htrack"><div class="hfill" style="width:' + w.toFixed(2) + '%;background:' + (it.color || color) + ';"></div></div>' +
+      '<div class="hval">' + fmtFn(it.value) + (showPct ? ' <span class="pct">' + pct.toFixed(1) + '%</span>' : '') + '</div></div>';
+  }).join('');
+  el.querySelectorAll('.hrow').forEach(row => {
+    const it = items[+row.dataset.i];
+    const pct = total > 0 ? (it.value / total * 100).toFixed(1) : '0';
+    row.addEventListener('mousemove', ev => showTT('<div class="tt-title">' + esc(it.label) + '</div><b>' + fmtFn(it.value) + unit + '</b>' + (showPct ? ' · ' + pct + '%' : ''), ev));
+    row.addEventListener('mouseleave', hideTT);
+  });
+}
+
+/* ---------- 차트: 세로 막대(SVG) ---------- */
+function colChart(el, labels, values, opts = {}) {
+  const { color = 'var(--s1)', unit = '건', xEvery = 1, height = 220, tableCols = null } = opts;
+  el = typeof el === 'string' ? $(el) : el;
+  if (!values.length || values.every(v => !v)) { el.innerHTML = '<div class="empty">선택 기간에 데이터가 없습니다</div>'; return; }
+  const W = 900, H = height, mL = 44, mR = 8, mT = 12, mB = 26;
+  const pw = W - mL - mR, ph = H - mT - mB;
+  const max = niceMax(Math.max(...values));
+  const n = values.length, slot = pw / n, bw = Math.min(28, slot * 0.62);
+  let g = '';
+  for (let t = 0; t <= 4; t++) {
+    const y = mT + ph - ph * t / 4;
+    g += '<line x1="' + mL + '" y1="' + y + '" x2="' + (W - mR) + '" y2="' + y + '" stroke="var(--grid)" stroke-width="1"/>' +
+         '<text x="' + (mL - 6) + '" y="' + (y + 4) + '" text-anchor="end" font-size="10.5" fill="var(--muted)">' + fmt(max * t / 4) + '</text>';
+  }
+  let bars = '', hits = '', xlab = '';
+  values.forEach((v, i) => {
+    const x = mL + slot * i + (slot - bw) / 2;
+    const h = max > 0 ? ph * v / max : 0;
+    const y = mT + ph - h;
+    const r = Math.min(4, bw / 2, h);
+    bars += '<path d="M' + x + ' ' + (mT + ph) + ' V' + (y + r) + ' Q' + x + ' ' + y + ' ' + (x + r) + ' ' + y + ' H' + (x + bw - r) + ' Q' + (x + bw) + ' ' + y + ' ' + (x + bw) + ' ' + (y + r) + ' V' + (mT + ph) + ' Z" fill="' + color + '"/>';
+    hits += '<rect data-i="' + i + '" x="' + (mL + slot * i) + '" y="' + mT + '" width="' + slot + '" height="' + ph + '" fill="transparent"/>';
+    if (i % xEvery === 0) xlab += '<text x="' + (x + bw / 2) + '" y="' + (H - 8) + '" text-anchor="middle" font-size="10.5" fill="var(--muted)">' + esc(labels[i]) + '</text>';
+  });
+  el.innerHTML = '<svg viewBox="0 0 ' + W + ' ' + H + '" style="width:100%;height:auto;display:block;">' + g +
+    '<line x1="' + mL + '" y1="' + (mT + ph) + '" x2="' + (W - mR) + '" y2="' + (mT + ph) + '" stroke="var(--axis)" stroke-width="1"/>' + bars + hits + '</svg>' +
+    dataTable(labels, [{ name: unit === '점' ? '평균점수' : '건수', values }], tableCols);
+  el.querySelectorAll('rect[data-i]').forEach(r => {
+    const i = +r.dataset.i;
+    r.addEventListener('mousemove', ev => showTT('<div class="tt-title">' + esc(labels[i]) + '</div><b>' + (unit === '점' ? fmt1(values[i]) : fmt(values[i])) + unit + '</b>', ev));
+    r.addEventListener('mouseleave', hideTT);
+  });
+}
+
+/* ---------- 차트: 라인(SVG) ---------- */
+function lineChart(el, labels, values, opts = {}) {
+  const { color = 'var(--s1)', unit = '건', height = 240, decimals = 0 } = opts;
+  el = typeof el === 'string' ? $(el) : el;
+  if (values.length < 2) { el.innerHTML = '<div class="empty">선택 기간에 데이터가 없습니다</div>'; return; }
+  const W = 900, H = height, mL = 44, mR = 10, mT = 12, mB = 26;
+  const pw = W - mL - mR, ph = H - mT - mB;
+  const max = niceMax(Math.max(...values));
+  const n = values.length;
+  const X = i => mL + (n === 1 ? pw / 2 : pw * i / (n - 1));
+  const Y = v => mT + ph - (max > 0 ? ph * v / max : 0);
+  let g = '';
+  for (let t = 0; t <= 4; t++) {
+    const y = mT + ph - ph * t / 4;
+    g += '<line x1="' + mL + '" y1="' + y + '" x2="' + (W - mR) + '" y2="' + y + '" stroke="var(--grid)" stroke-width="1"/>' +
+         '<text x="' + (mL - 6) + '" y="' + (y + 4) + '" text-anchor="end" font-size="10.5" fill="var(--muted)">' + (decimals ? fmt1(max * t / 4) : fmt(max * t / 4)) + '</text>';
+  }
+  const pts = values.map((v, i) => X(i).toFixed(1) + ',' + Y(v).toFixed(1));
+  const area = 'M' + mL + ' ' + (mT + ph) + ' L' + pts.join(' L') + ' L' + (W - mR) + ' ' + (mT + ph) + ' Z';
+  const xEvery = Math.max(1, Math.ceil(n / 14));
+  let xlab = '';
+  labels.forEach((l, i) => { if (i % xEvery === 0) xlab += '<text x="' + X(i).toFixed(1) + '" y="' + (H - 8) + '" text-anchor="middle" font-size="10.5" fill="var(--muted)">' + esc(l) + '</text>'; });
+  el.innerHTML = '<svg viewBox="0 0 ' + W + ' ' + H + '" style="width:100%;height:auto;display:block;" class="linechart">' + g +
+    '<line x1="' + mL + '" y1="' + (mT + ph) + '" x2="' + (W - mR) + '" y2="' + (mT + ph) + '" stroke="var(--axis)" stroke-width="1"/>' +
+    '<path d="' + area + '" fill="' + color + '" opacity="0.10"/>' +
+    '<polyline points="' + pts.join(' ') + '" fill="none" stroke="' + color + '" stroke-width="2" stroke-linejoin="round"/>' +
+    '<line class="xh" x1="0" y1="' + mT + '" x2="0" y2="' + (mT + ph) + '" stroke="var(--axis)" stroke-width="1" style="display:none;"/>' +
+    '<circle class="dot" r="4.5" fill="' + color + '" stroke="var(--surface)" stroke-width="2" style="display:none;"/>' +
+    xlab + '<rect class="hit" x="' + mL + '" y="' + mT + '" width="' + pw + '" height="' + ph + '" fill="transparent"/></svg>' +
+    dataTable(labels, [{ name: unit === '점' ? '평균점수' : '건수', values }]);
+  const svg = el.querySelector('svg'), xh = svg.querySelector('.xh'), dot = svg.querySelector('.dot'), hit = svg.querySelector('.hit');
+  hit.addEventListener('mousemove', ev => {
+    const box = svg.getBoundingClientRect();
+    const mx = (ev.clientX - box.left) * (W / box.width);
+    const i = Math.max(0, Math.min(n - 1, Math.round((mx - mL) / (pw / (n - 1)))));
+    xh.setAttribute('x1', X(i)); xh.setAttribute('x2', X(i)); xh.style.display = '';
+    dot.setAttribute('cx', X(i)); dot.setAttribute('cy', Y(values[i])); dot.style.display = '';
+    showTT('<div class="tt-title">' + esc(labels[i]) + '</div><b>' + (decimals ? fmt1(values[i]) : fmt(values[i])) + unit + '</b>', ev);
+  });
+  hit.addEventListener('mouseleave', () => { xh.style.display = 'none'; dot.style.display = 'none'; hideTT(); });
+}
+
+/* ---------- 차트: 누적 세로 막대(SVG) ---------- */
+function stackedChart(el, labels, series, opts = {}) {
+  const { height = 250, unit = '건' } = opts;
+  el = typeof el === 'string' ? $(el) : el;
+  const totals = labels.map((_, i) => series.reduce((s, sr) => s + (sr.values[i] || 0), 0));
+  if (!labels.length || totals.every(t => !t)) { el.innerHTML = '<div class="empty">데이터가 없습니다</div>'; return; }
+  const W = 900, H = height, mL = 44, mR = 8, mT = 12, mB = 26;
+  const pw = W - mL - mR, ph = H - mT - mB;
+  const max = niceMax(Math.max(...totals));
+  const n = labels.length, slot = pw / n, bw = Math.min(26, slot * 0.62);
+  let g = '';
+  for (let t = 0; t <= 4; t++) {
+    const y = mT + ph - ph * t / 4;
+    g += '<line x1="' + mL + '" y1="' + y + '" x2="' + (W - mR) + '" y2="' + y + '" stroke="var(--grid)" stroke-width="1"/>' +
+         '<text x="' + (mL - 6) + '" y="' + (y + 4) + '" text-anchor="end" font-size="10.5" fill="var(--muted)">' + fmt(max * t / 4) + '</text>';
+  }
+  let bars = '', hits = '', xlab = '';
+  const xEvery = Math.max(1, Math.ceil(n / 16));
+  labels.forEach((lb, i) => {
+    const x = mL + slot * i + (slot - bw) / 2;
+    let yCur = mT + ph;
+    series.forEach((sr, si) => {
+      const v = sr.values[i] || 0; if (!v) return;
+      const h = ph * v / max;
+      const yTop = yCur - h;
+      const isTop = series.slice(si + 1).every(s2 => !(s2.values[i] || 0));
+      if (isTop && h > 4) {
+        const r = Math.min(4, bw / 2);
+        bars += '<path d="M' + x + ' ' + yCur + ' V' + (yTop + r) + ' Q' + x + ' ' + yTop + ' ' + (x + r) + ' ' + yTop + ' H' + (x + bw - r) + ' Q' + (x + bw) + ' ' + yTop + ' ' + (x + bw) + ' ' + (yTop + r) + ' V' + yCur + ' Z" fill="' + sr.color + '" stroke="var(--surface)" stroke-width="1"/>';
+      } else {
+        bars += '<rect x="' + x + '" y="' + yTop + '" width="' + bw + '" height="' + h + '" fill="' + sr.color + '" stroke="var(--surface)" stroke-width="1"/>';
+      }
+      yCur = yTop;
+    });
+    hits += '<rect data-i="' + i + '" x="' + (mL + slot * i) + '" y="' + mT + '" width="' + slot + '" height="' + ph + '" fill="transparent"/>';
+    if (i % xEvery === 0) xlab += '<text x="' + (x + bw / 2) + '" y="' + (H - 8) + '" text-anchor="middle" font-size="10.5" fill="var(--muted)">' + esc(lb) + '</text>';
+  });
+  const legend = '<div class="legend">' + series.map(sr => '<span class="li"><span class="sw" style="background:' + sr.color + '"></span>' + esc(sr.name) + '</span>').join('') + '</div>';
+  el.innerHTML = legend + '<svg viewBox="0 0 ' + W + ' ' + H + '" style="width:100%;height:auto;display:block;">' + g +
+    '<line x1="' + mL + '" y1="' + (mT + ph) + '" x2="' + (W - mR) + '" y2="' + (mT + ph) + '" stroke="var(--axis)" stroke-width="1"/>' + bars + hits + '</svg>' +
+    dataTable(labels, series.concat([{ name: '합계', values: totals }]));
+  el.querySelectorAll('rect[data-i]').forEach(r => {
+    const i = +r.dataset.i;
+    r.addEventListener('mousemove', ev => {
+      let html = '<div class="tt-title">' + esc(labels[i]) + ' · 합계 ' + fmt(totals[i]) + unit + '</div>';
+      series.forEach(sr => { const v = sr.values[i] || 0; if (v) html += '<div class="tt-row"><span class="sw" style="background:' + sr.color + '"></span>' + esc(sr.name) + ' <b>' + fmt(v) + '</b></div>'; });
+      showTT(html, ev);
+    });
+    r.addEventListener('mouseleave', hideTT);
+  });
+}
+
+/* ---------- 데이터 표(접이식) ---------- */
+function dataTable(labels, series, colLabels) {
+  let head = '<tr><th>구분</th>' + series.map(s => '<th>' + esc(s.name || '건수') + '</th>').join('') + '</tr>';
+  let body = labels.map((l, i) => '<tr><td>' + esc(colLabels ? colLabels[i] : l) + '</td>' + series.map(s => '<td>' + (Number.isInteger(s.values[i]) ? fmt(s.values[i]) : fmt1(s.values[i])) + '</td>').join('') + '</tr>').join('');
+  return '<details><summary>데이터 표로 보기</summary><div style="max-height:220px;overflow:auto;"><table>' + head + body + '</table></div></details>';
+}
+
+/* ---------- KPI ---------- */
+let kpiDetailRows = { unsat: [], miss: [] };
+let kpiDetailOpen = null;
+function renderKpis(seed, reviews) {
+  const total = seed.length;
+  const done = seed.filter(r => r.result === '원격 완료' || r.result === '전화 완료' || r.result === '점검완료').length;
+  const scored = reviews.length;
+  // 평균 리뷰점수 = 점수합 ÷ (원격 완료 + A/S 접수 건수), AL 공란·1833 제외 — 점검자 분석과 동일한 운영 산식
+  const scoreBase = seed.filter(r => r.al === '' && !r.so.includes('1833') && (r.result === '원격 완료' || r.result === 'A/S 접수'));
+  const avgScore = scoreBase.length ? scoreBase.reduce((s, r) => s + (r.score || 0), 0) / scoreBase.length : null;
+  // M2 설치율 (LGU+ · AL 공란 · 원격완료/A/S접수)
+  const m2base = seed.filter(r => r.al === '' && r.so === 'LGU+' && (r.result === '원격 완료' || r.result === 'A/S 접수'));
+  const m2n = m2base.filter(r => r.p === '설치' || r.p === '설치후삭제').length;
+  // 불만족 (리뷰 3점 이하)
+  kpiDetailRows.unsat = seed.filter(r => r.score != null && r.score <= 3).sort((a, b) => b.date.localeCompare(a.date));
+  // 점검유형 누락 (AG=입력누락, 이현정 제외)
+  kpiDetailRows.miss = seed.filter(r => r.ag === '입력누락' && r.agent !== '이현정').sort((a, b) => b.date.localeCompare(a.date));
+  // 직전 동일 길이 기간 대비 증감
+  let deltaHtml = '';
+  if (state.from && state.to) {
+    const f = dsToDate(state.from), t = dsToDate(state.to);
+    const days = Math.round((t - f) / 86400000) + 1;
+    const pf = dateToDs(addDays(f, -days)), pt = dateToDs(addDays(f, -1));
+    const prev = DATA.seed.filter(r => r.date >= pf && r.date <= pt).length;
+    if (prev > 0) {
+      const d = (total - prev) / prev * 100;
+      deltaHtml = ' · 직전 대비 <b>' + (d >= 0 ? '▲' : '▼') + Math.abs(d).toFixed(1) + '%</b>';
+    }
+  }
+  $('kpis').innerHTML =
+    kpi('총 인입', fmt(total), '건', '완료율 <b>' + (total ? (done / total * 100).toFixed(1) : '-') + '%</b> (' + fmt(done) + '건)' + deltaHtml) +
+    kpi('평균 리뷰점수', avgScore != null ? fmt1(avgScore) : '-', '점', '리뷰 응답 ' + fmt(scored) + '건 · 응답율 <b>' + (total ? (scored / total * 100).toFixed(1) : '-') + '%</b>') +
+    kpi('M2 설치율', m2base.length ? fmt1(m2n / m2base.length * 100) : '-', '%', '설치 ' + fmt(m2n) + ' / 완료 ' + fmt(m2base.length) + ' · LGU+') +
+    kpi('불만족 건수', fmt(kpiDetailRows.unsat.length), '건', '리뷰 3점 이하 · <b>클릭하여 상세 보기</b>', 'unsat') +
+    kpi('점검유형 누락', fmt(kpiDetailRows.miss.length), '건', 'AG=입력누락 · 이현정 제외 · <b>클릭하여 상세</b>', 'miss');
+  document.querySelectorAll('#kpis .kpi[data-kpi]').forEach(el =>
+    el.addEventListener('click', () => toggleKpiDetail(el.dataset.kpi)));
+  renderKpiDetail();
+}
+function kpi(label, value, unit, sub, clickKey) {
+  return '<div class="kpi"' + (clickKey ? ' data-kpi="' + clickKey + '" style="cursor:pointer;"' : '') + '><div class="k-label">' + label + '</div><div class="k-value">' + value + '<small>' + unit + '</small></div><div class="k-sub">' + sub + '</div></div>';
+}
+function toggleKpiDetail(key) {
+  kpiDetailOpen = kpiDetailOpen === key ? null : key;
+  renderKpiDetail();
+}
+function renderKpiDetail() {
+  const el = $('kpiDetail');
+  if (!kpiDetailOpen) { el.innerHTML = ''; return; }
+  const isUnsat = kpiDetailOpen === 'unsat';
+  const rows = kpiDetailRows[kpiDetailOpen] || [];
+  el.innerHTML = '<div class="card"><h3>' + (isUnsat ? '😞 불만족 건 (리뷰 3점 이하)' : '⚠️ 점검유형 누락 건 (AG=입력누락 · 이현정 제외)') +
+    ' <span style="font-weight:400;color:var(--muted);font-size:12.5px;">— ' + fmt(rows.length) + '건 · 최신순 최대 100건</span>' +
+    ' <a href="#" onclick="toggleKpiDetail(null);return false;" style="float:right;font-size:12px;">닫기 ✕</a></h3>' +
+    '<div style="overflow-x:auto;max-height:420px;overflow-y:auto;"><table class="list"><tr><th style="width:90px;">접수일</th><th>SO (B열)</th><th>점검자 (D열)</th>' + (isUnsat ? '<th style="width:50px;">점수</th><th>리뷰</th>' : '<th>처리결과</th>') + '</tr>' +
+    rows.slice(0, 100).map(r => {
+      const sj = DATA.sjMap.get(r.rpt) || {};
+      return '<tr><td class="num">' + r.date + '</td><td>' + esc(r.so) + '</td><td>' + esc(r.agent) + '</td>' +
+        (isUnsat ? '<td><span class="scorechip">' + r.score + '</span></td><td>' + esc(sj.rtext && sj.rtext !== '리뷰없음' ? sj.rtext : '-') + '</td>' : '<td>' + esc(r.result) + '</td>') + '</tr>';
+    }).join('') + '</table></div></div>';
+}
+
+/* ---------- 전체 렌더 ---------- */
+function renderAll() {
+  const seed = filt(DATA.seed);
+  const reviews = filt(DATA.review);
+  const jochi = filt(DATA.jochi);
+
+  renderKpis(seed, reviews);
+
+  // 인입 추이: 기간 121일 이하 = 일별, 초과 = 월별
+  let daily = true;
+  if (!state.from) daily = false;
+  else { const days = Math.round((dsToDate(state.to) - dsToDate(state.from)) / 86400000) + 1; daily = days <= 121; }
+  if (daily && seed.length) {
+    const m = countBy(seed, r => r.date);
+    const labels = [], values = [];
+    for (let d = dsToDate(state.from); d <= dsToDate(state.to); d = addDays(d, 1)) {
+      const ds = dateToDs(d); labels.push(ds.slice(5).replace('-', '/')); values.push(m.get(ds) || 0);
+    }
+    $('trendTitle').textContent = '일별 인입 추이';
+    lineChart('chTrend', labels, values);
+  } else {
+    const m = countBy(seed, r => r.date.slice(0, 7));
+    const keys = [...m.keys()].sort();
+    $('trendTitle').textContent = '월별 인입 추이';
+    lineChart('chTrend', keys.map(monthLabel), keys.map(k => m.get(k)));
+  }
+
+  hbar('chResult', topN(countBy(seed, r => r.result), 8));
+  hbar('chMso', topN(countBy(seed, r => r.mso), 8), { color: 'var(--s2)' });
+
+  // ── 인입 분석 페이지 (SO 필터 적용)
+  renderInflowTrend();
+  const seedIf = inflowSeed();
+  hbar('chSo', topN(countBy(seed, r => r.soG), 12), { color: 'var(--s5)' }); // SO 분포는 전체 기준 (CNM 통합)
+
+  // 시간대
+  const hm = countBy(seedIf.filter(r => r.hour != null), r => r.hour);
+  const hours = [...Array(24).keys()].filter(h => (hm.get(h) || 0) > 0);
+  const hFrom = hours.length ? Math.min(...hours) : 9, hTo = hours.length ? Math.max(...hours) : 18;
+  const hLabels = [], hValues = [];
+  for (let h = hFrom; h <= hTo; h++) { hLabels.push(h + '시'); hValues.push(hm.get(h) || 0); }
+  colChart('chHour', hLabels, hValues);
+
+  // 요일 (가로 막대, 월~일 순서 고정)
+  const dm = countBy(seedIf, r => dsToDate(r.date).getDay());
+  hbar('chDow', [1, 2, 3, 4, 5, 6, 0].map(d => ({ label: DOW[d] + '요일', value: dm.get(d) || 0 })), { color: 'var(--s2)' });
+
+  // 조치사항 차트 + 상세 표
+  hbar('chSym', topN(countBy(jochi.filter(r => r.sym), r => r.sym), 10, false), { color: 'var(--s6)' });
+  hbar('chCause', topN(countBy(jochi.filter(r => r.cause), r => r.cause), 10, false), { color: 'var(--s3)' });
+  hbar('chAct', topN(countBy(jochi.filter(r => r.act), r => r.act), 10, false), { color: 'var(--s2)' });
+  hbar('chSym2', topN(countBy(jochi.filter(r => r.sym2), r => r.sym2), 10, false), { color: 'var(--s6)' });
+  hbar('chCause2', topN(countBy(jochi.filter(r => r.cause2), r => r.cause2), 10, false), { color: 'var(--s3)' });
+  hbar('chAct2', topN(countBy(jochi.filter(r => r.act2), r => r.act2), 10, false), { color: 'var(--s2)' });
+
+  // 저점 리뷰
+  const low = reviews.filter(r => r.score <= 6).sort((a, b) => b.date.localeCompare(a.date)).slice(0, 20);
+  $('lowReviews').innerHTML = !low.length ? '<div class="empty">선택 기간에 6점 이하 리뷰가 없습니다 🎉</div>' :
+    '<table class="list"><tr><th style="width:90px;">날짜</th><th style="width:130px;">SO</th><th style="width:50px;">점수</th><th>리뷰 내용</th></tr>' +
+    low.map(r => '<tr><td class="num">' + r.date + '</td><td>' + esc(r.so) + '</td><td><span class="scorechip">' + r.score + '</span></td><td>' + esc(r.text || '(내용 없음)') + '</td></tr>').join('') + '</table>';
+
+  renderAgentsPage();
+}
+
+/* ---------- 인입량 추이 (월/주/일 + SO 필터) ---------- */
+let inflowGran = 'day', inflowSo = '';
+function mondayDs(ds) { const d = dsToDate(ds); return dateToDs(addDays(d, -((d.getDay() + 6) % 7))); }
+function inflowSeed() {
+  let s = filt(DATA.seed);
+  if (inflowSo) s = s.filter(r => r.soG === inflowSo);
+  return s;
+}
+function renderInflowTrend() {
+  const seed = inflowSeed();
+  if (!seed.length) { $('chInTrend').innerHTML = '<div class="empty">선택 기간에 데이터가 없습니다</div>'; return; }
+  let labels = [], values = [];
+  if (inflowGran === 'month') {
+    const m = countBy(seed, r => r.date.slice(0, 7));
+    const keys = [...m.keys()].sort();
+    labels = keys.map(monthLabel); values = keys.map(k => m.get(k));
+  } else if (inflowGran === 'week') {
+    const m = countBy(seed, r => mondayDs(r.date));
+    const keys = [...m.keys()].sort();
+    labels = keys.map(k => k.slice(5).replace('-', '/') + '주'); values = keys.map(k => m.get(k));
+  } else {
+    const m = countBy(seed, r => r.date);
+    const from = state.from || [...m.keys()].sort()[0];
+    const to = state.to || [...m.keys()].sort().pop();
+    for (let d = dsToDate(from); d <= dsToDate(to); d = addDays(d, 1)) {
+      const ds = dateToDs(d);
+      labels.push(ds.slice(5).replace('-', '/')); values.push(m.get(ds) || 0);
+    }
+  }
+  lineChart('chInTrend', labels, values, { height: 260 });
+}
+
+/* ---------- 점검자 분석 ---------- */
+let agentYm = null, agentSel = null, agentChecked = null, detailGran = 'month';
+const detailRange = { from: null, to: null };
+const AGENT_EXCLUDE = /취소|없음|^APP|미배정|테스트|^양동영$|^이현정$/i; // 양동영·이현정은 점검자 분석에서 집계 제외
+
+function computeAgentStats(ym) {
+  const seedM = DATA.seed.filter(r => r.date.slice(0, 7) === ym);
+  const remoteM = DATA.remote.filter(r => r.cym === ym && r.agent2 && !AGENT_EXCLUDE.test(r.agent2));
+  const compM = DATA.computer.filter(r => r.date.slice(0, 7) === ym && r.name);
+  const rtM = DATA.realtime.filter(r => r.date.slice(0, 7) === ym && r.agent);
+  // 점검자 후보: seed(인정 O)·remote 2차·컴퓨터주치의에 등장하는 이름 (실시간원격주치의는 집계에만 반영)
+  const names = new Set();
+  seedM.forEach(r => { if (r.agent && r.af === 'O' && !AGENT_EXCLUDE.test(r.agent)) names.add(r.agent); });
+  remoteM.forEach(r => names.add(r.agent2));
+  compM.forEach(r => { if (!AGENT_EXCLUDE.test(r.name)) names.add(r.name); });
+  const okC = x => x.u.startsWith('동의') && x.v.startsWith('동의');
+  const out = [];
+  for (const name of names) {
+    const sCnt = seedM.filter(r => r.agent === name && r.af === 'O').length;
+    const rCnt = remoteM.filter(r => r.agent2 === name).length;
+    const cCnt = compM.filter(r => r.name === name).length;
+    const tCnt = rtM.filter(r => r.agent === name).length;
+    // 리뷰점수 = 점수합 ÷ (원격 완료 + A/S 접수 건수), AL 공란·1833 제외 — 운영 산식
+    const base = seedM.filter(r => r.agent === name && r.al === '' && !r.so.includes('1833'));
+    const done = base.filter(r => r.result === '원격 완료' || r.result === 'A/S 접수');
+    const scoreSum = done.reduce((s, r) => s + (r.score || 0), 0);
+    const nScored = done.filter(r => r.score != null).length;
+    const score = done.length ? scoreSum / done.length : null;
+    // 선택동의율 = (AM대상 동의 + AN대상 동의) ÷ (AM대상 + AN대상), AL 공란
+    const cbase = seedM.filter(r => r.agent === name && r.al === '');
+    const amT = cbase.filter(r => r.am.startsWith('대상'));
+    const anT = cbase.filter(r => r.an.startsWith('대상'));
+    const cd = amT.length + anT.length;
+    const cn = amT.filter(okC).length + anT.filter(okC).length;
+    // M2 설치율 = 설치·설치후삭제 건 ÷ (원격 완료 + A/S 접수 건), SO="LGU+"·AL 공란 — 운영 산식
+    const m2base = seedM.filter(r => r.agent === name && r.al === '' && r.so === 'LGU+' && (r.result === '원격 완료' || r.result === 'A/S 접수'));
+    const m2d = m2base.length;
+    const m2n = m2base.filter(r => r.p === '설치' || r.p === '설치후삭제').length;
+    out.push({ name, vol: sCnt + rCnt + cCnt + tCnt, sCnt, rCnt, cCnt, tCnt, score, nScored, nDone: done.length, consent: cd ? cn / cd * 100 : null, cn, cd, m2: m2d ? m2n / m2d * 100 : null, m2n, m2d });
+  }
+  return out.filter(a => a.vol > 0).sort((a, b) => b.vol - a.vol);
+}
+
+function renderAgentsPage() {
+  const months = [...new Set(DATA.seed.map(r => r.date.slice(0, 7)))].sort().reverse();
+  const sel = $('agentYm');
+  if (!months.length) { sel.innerHTML = ''; $('agentTable').innerHTML = '<div class="empty">데이터가 없습니다</div>'; $('agentDetailCard').style.display = 'none'; return; }
+  sel.innerHTML = months.map(m => '<option value="' + m + '">' + m.replace('-', '년 ') + '월</option>').join('');
+  if (!agentYm || !months.includes(agentYm)) agentYm = months[0];
+  sel.value = agentYm;
+  renderAgents();
+}
+
+function renderAgents() {
+  const stats = computeAgentStats(agentYm);
+  const names = stats.map(a => a.name);
+  // 선택 집합 유지 (월 변경·데이터 갱신 시 존재하는 이름만 유지, 비면 전체 선택)
+  if (!agentChecked) agentChecked = new Set(names);
+  else {
+    agentChecked = new Set([...agentChecked].filter(n => names.includes(n)));
+    if (!agentChecked.size) agentChecked = new Set(names);
+  }
+  const sel = stats.filter(a => agentChecked.has(a.name));
+  const totVol = sel.reduce((s, a) => s + a.vol, 0);
+  // 그룹 리뷰점수·동의율은 합산 기준 (Σ점수합 ÷ Σ완료건)
+  const sumScore = sel.reduce((s, a) => s + (a.score != null ? a.score * a.nDone : 0), 0);
+  const sumDone = sel.reduce((s, a) => s + a.nDone, 0);
+  const sumCn = sel.reduce((s, a) => s + a.cn, 0), sumCd = sel.reduce((s, a) => s + a.cd, 0);
+  $('agentKpis').innerHTML =
+    kpi('총 점검량', fmt(totVol), '건', agentYm.replace('-', '년 ') + '월 · 선택 인원 합산') +
+    kpi('인당 평균 점검량', sel.length ? fmt1(totVol / sel.length) : '-', '건', '총 점검량 ÷ 선택 인원') +
+    kpi('점검자', fmt(sel.length), '명', '전체 ' + fmt(stats.length) + '명 중 선택') +
+    kpi('평균 리뷰점수', sumDone ? fmt1(sumScore / sumDone) : '-', '점', '선택 인원 합산 · 점수합÷완료건') +
+    kpi('평균 선택동의율', sumCd ? fmt1(sumCn / sumCd * 100) : '-', '%', '선택 인원 합산 · 동의÷대상');
+
+  if (!stats.length) {
+    $('agentTable').innerHTML = '<div class="empty">해당 월에 점검 데이터가 없습니다</div>';
+    ['chAgVol', 'chAgScore', 'chAgConsent', 'chAgM2'].forEach(id => { $(id).innerHTML = '<div class="empty">-</div>'; });
+    $('agentDetailCard').style.display = 'none';
+    return;
+  }
+  const allChecked = agentChecked.size === names.length;
+  $('agentTable').innerHTML =
+    '<div style="overflow-x:auto;"><table class="list"><tr>' +
+    '<th style="width:34px;"><input type="checkbox" id="agChkAll"' + (allChecked ? ' checked' : '') + ' title="전체 선택/해제"></th>' +
+    '<th>점검자</th><th style="text-align:right;">점검량</th>' +
+    '<th style="text-align:right;">seed</th><th style="text-align:right;">remote</th><th style="text-align:right;">컴퓨터주치의</th><th style="text-align:right;">실시간원격</th>' +
+    '<th style="text-align:right;">리뷰점수</th><th style="text-align:right;">리뷰 응답</th><th style="text-align:right;">선택동의율</th><th style="text-align:right;">동의/대상</th>' +
+    '<th style="text-align:right;">M2설치율</th><th style="text-align:right;">설치/완료</th></tr>' +
+    stats.map(a =>
+      '<tr class="agrow' + (a.name === agentSel ? ' sel' : '') + '" data-name="' + esc(a.name) + '">' +
+      '<td><input type="checkbox" class="agchk" data-name="' + esc(a.name) + '"' + (agentChecked.has(a.name) ? ' checked' : '') + '></td>' +
+      '<td>' + esc(a.name) + '</td><td class="num" style="text-align:right;font-weight:600;">' + fmt(a.vol) + '</td>' +
+      '<td class="num" style="text-align:right;">' + fmt(a.sCnt) + '</td><td class="num" style="text-align:right;">' + fmt(a.rCnt) + '</td>' +
+      '<td class="num" style="text-align:right;">' + fmt(a.cCnt) + '</td><td class="num" style="text-align:right;">' + fmt(a.tCnt) + '</td>' +
+      '<td class="num" style="text-align:right;">' + (a.score != null ? fmt1(a.score) : '-') + '</td>' +
+      '<td class="num" style="text-align:right;">' + fmt(a.nScored) + '/' + fmt(a.nDone) + '</td>' +
+      '<td class="num" style="text-align:right;">' + (a.consent != null ? fmt1(a.consent) + '%' : '-') + '</td>' +
+      '<td class="num" style="text-align:right;">' + fmt(a.cn) + '/' + fmt(a.cd) + '</td>' +
+      '<td class="num" style="text-align:right;">' + (a.m2 != null ? fmt1(a.m2) + '%' : '-') + '</td>' +
+      '<td class="num" style="text-align:right;">' + fmt(a.m2n) + '/' + fmt(a.m2d) + '</td></tr>'
+    ).join('') + '</table></div>';
+  document.querySelectorAll('#agentTable .agrow').forEach(tr =>
+    tr.addEventListener('click', ev => {
+      if (ev.target.classList.contains('agchk')) return;
+      agentSel = tr.dataset.name; renderAgents();
+    }));
+  document.querySelectorAll('#agentTable .agchk').forEach(cb =>
+    cb.addEventListener('change', () => {
+      cb.checked ? agentChecked.add(cb.dataset.name) : agentChecked.delete(cb.dataset.name);
+      renderAgents();
+    }));
+  const chkAll = $('agChkAll');
+  if (chkAll) chkAll.addEventListener('change', () => {
+    agentChecked = chkAll.checked ? new Set(names) : new Set(names.slice(0, 1)); // 최소 1명 유지
+    renderAgents();
+  });
+
+  hbar('chAgVol', sel.map(a => ({ label: a.name, value: a.vol })));
+  hbar('chAgScore', sel.filter(a => a.score != null).sort((a, b) => b.score - a.score).map(a => ({ label: a.name, value: a.score })),
+    { color: 'var(--s5)', unit: '점', fmtFn: fmt1, showPct: false });
+  hbar('chAgConsent', sel.filter(a => a.consent != null).sort((a, b) => b.consent - a.consent).map(a => ({ label: a.name, value: a.consent })),
+    { color: 'var(--s2)', unit: '%', fmtFn: v => fmt1(v) + '%', showPct: false });
+  hbar('chAgM2', sel.filter(a => a.m2 != null).sort((a, b) => b.m2 - a.m2).map(a => ({ label: a.name, value: a.m2 })),
+    { color: 'var(--s8)', unit: '%', fmtFn: v => fmt1(v) + '%', showPct: false });
+
+  // 상세 분석 점검자 셀렉트
+  if (!agentSel || !names.includes(agentSel)) agentSel = (sel[0] || stats[0]).name;
+  const box = $('agentSelBox');
+  box.innerHTML = stats.map(a => '<option value="' + esc(a.name) + '"' + (a.name === agentSel ? ' selected' : '') + '>' + esc(a.name) + '</option>').join('');
+  renderAgentDetail();
+}
+
+/* ── 상세 분석: 월/주/일 시계열 + 선택 인원 평균 비교 (기간 필터 지원) ── */
+function periodKeys(gran) {
+  const hasRange = detailRange.from && detailRange.to;
+  const maxSeed = DATA.seed.reduce((m, r) => r.date > m ? r.date : m, '');
+  const anchor = hasRange ? dsToDate(detailRange.to) : (maxSeed ? dsToDate(maxSeed) : new Date());
+  const rangeInfo = hasRange ? detailRange.from + ' ~ ' + detailRange.to : null;
+  if (gran === 'month') {
+    let months;
+    if (hasRange) {
+      months = [];
+      const s = dsToDate(detailRange.from);
+      let d = new Date(s.getFullYear(), s.getMonth(), 1);
+      while (d <= anchor) { months.push(d.getFullYear() + '-' + pad2(d.getMonth() + 1)); d = new Date(d.getFullYear(), d.getMonth() + 1, 1); }
+    } else {
+      months = [...new Set(DATA.seed.map(r => r.date.slice(0, 7)))].sort().slice(-12);
+    }
+    return { keys: months, labels: months.map(monthLabel), keyFn: ds => ds.slice(0, 7), info: rangeInfo || '최근 ' + months.length + '개월' };
+  }
+  if (gran === 'week') {
+    const endMon = dsToDate(mondayDs(dateToDs(anchor)));
+    let keys = [];
+    if (hasRange) {
+      for (let d = dsToDate(mondayDs(detailRange.from)); d <= endMon; d = addDays(d, 7)) keys.push(dateToDs(d));
+    } else {
+      for (let i = 15; i >= 0; i--) keys.push(dateToDs(addDays(endMon, -7 * i)));
+    }
+    if (keys.length > 120) keys = keys.slice(-120);
+    return { keys, labels: keys.map(k => k.slice(5).replace('-', '/') + '주'), keyFn: ds => mondayDs(ds), info: rangeInfo || '최근 16주 (주 시작=월요일)' };
+  }
+  let keys = [];
+  if (hasRange) {
+    for (let d = dsToDate(detailRange.from); d <= anchor; d = addDays(d, 1)) keys.push(dateToDs(d));
+    if (keys.length > 400) keys = keys.slice(-400); // 과도한 구간 보호
+  } else {
+    for (let i = 29; i >= 0; i--) keys.push(dateToDs(addDays(anchor, -i)));
+  }
+  return { keys, labels: keys.map(k => k.slice(5).replace('-', '/')), keyFn: ds => ds, info: rangeInfo || '최근 30일' };
+}
+
+/* 이름 집합의 기간별 점검량·리뷰점수·동의율 (그룹은 합산 기준) */
+function metricsSeries(nameSet, keys, keyFn) {
+  const idx = new Map(keys.map((k, i) => [k, i]));
+  const vol = keys.map(() => 0), done = keys.map(() => 0), scoreSum = keys.map(() => 0), cn = keys.map(() => 0), cd = keys.map(() => 0);
+  const m2n = keys.map(() => 0), m2d = keys.map(() => 0);
+  const okC = r => r.u.startsWith('동의') && r.v.startsWith('동의');
+  for (const r of DATA.seed) {
+    if (!nameSet.has(r.agent)) continue;
+    const i = idx.get(keyFn(r.date)); if (i == null) continue;
+    if (r.af === 'O') vol[i]++;
+    if (r.al === '') {
+      const isDone = r.result === '원격 완료' || r.result === 'A/S 접수';
+      if (!r.so.includes('1833') && isDone) { done[i]++; scoreSum[i] += r.score || 0; }
+      if (r.so === 'LGU+' && isDone) { m2d[i]++; if (r.p === '설치' || r.p === '설치후삭제') m2n[i]++; }
+      if (r.am.startsWith('대상')) { cd[i]++; if (okC(r)) cn[i]++; }
+      if (r.an.startsWith('대상')) { cd[i]++; if (okC(r)) cn[i]++; }
+    }
+  }
+  for (const r of DATA.remote) { if (r.cdate && r.agent2 && nameSet.has(r.agent2)) { const i = idx.get(keyFn(r.cdate)); if (i != null) vol[i]++; } }
+  for (const r of DATA.computer) { if (nameSet.has(r.name)) { const i = idx.get(keyFn(r.date)); if (i != null) vol[i]++; } }
+  for (const r of DATA.realtime) { if (r.agent && nameSet.has(r.agent)) { const i = idx.get(keyFn(r.date)); if (i != null) vol[i]++; } }
+  return keys.map((k, i) => ({
+    vol: vol[i], score: done[i] ? scoreSum[i] / done[i] : null,
+    consent: cd[i] ? cn[i] / cd[i] * 100 : null, m2: m2d[i] ? m2n[i] / m2d[i] * 100 : null,
+  }));
+}
+
+function renderAgentDetail() {
+  const card = $('agentDetailCard');
+  if (!agentSel || !agentChecked || !agentChecked.size) { card.style.display = 'none'; return; }
+  card.style.display = '';
+  const { keys, labels, keyFn, info } = periodKeys(detailGran);
+  $('dRangeInfo').textContent = info;
+  const mine = metricsSeries(new Set([agentSel]), keys, keyFn);
+  const grp = metricsSeries(agentChecked, keys, keyFn);
+  const nGrp = agentChecked.size;
+  $('agentDetailSummary').innerHTML = '👤 <b>' + esc(agentSel) + '</b> vs 선택 인원 ' + fmt(nGrp) + '명 평균' +
+    (agentChecked.has(agentSel) ? ' (본인 포함)' : ' (본인 미포함)');
+  const cmp = (id, mineVals, grpVals, opts) => lineCmp(id, labels,
+    [{ name: agentSel, color: 'var(--s1)', values: mineVals },
+     { name: '선택 인원 평균', color: 'var(--s3)', dash: true, values: grpVals }],
+    Object.assign({ height: 300 }, opts));
+  cmp('chDVol', mine.map(m => m.vol), grp.map(m => m.vol / nGrp), { unit: '건', decimals: 1 });
+  cmp('chDScore', mine.map(m => m.score), grp.map(m => m.score), { unit: '점', decimals: 1 });
+  cmp('chDConsent', mine.map(m => m.consent), grp.map(m => m.consent), { unit: '%', decimals: 1 });
+  cmp('chDM2', mine.map(m => m.m2), grp.map(m => m.m2), { unit: '%', decimals: 1 });
+  // SO별 처리건수 (선택 기간, seed 인정 O, CNM 계열 통합) — 본인 vs 선택 인원 평균
+  const keySet = new Set(keys);
+  const seedW = DATA.seed.filter(r => keySet.has(keyFn(r.date)) && r.af === 'O');
+  $('dSoInfo').textContent = '— ' + info + ' · seed 인정(O) 기준';
+  const mineSo = countBy(seedW.filter(r => r.agent === agentSel), r => r.soG);
+  const grpSo = countBy(seedW.filter(r => agentChecked.has(r.agent)), r => r.soG);
+  const soList = [...new Set([...mineSo.keys(), ...grpSo.keys()])]
+    .map(so => ({ label: so, a: mineSo.get(so) || 0, b: (grpSo.get(so) || 0) / nGrp }))
+    .sort((x, y) => y.a - x.a || y.b - x.b).slice(0, 10);
+  hbarCompare('chDSo', soList, { aName: agentSel, bName: '선택 인원 평균' });
+  // 시간별 처리건수 (완료일자 H·완료시간 I열 기준, 인정 O)
+  const seedC = DATA.seed.filter(r => r.cdate && r.chour != null && r.af === 'O' && keySet.has(keyFn(r.cdate)));
+  const mineH = countBy(seedC.filter(r => r.agent === agentSel), r => r.chour);
+  const grpH = countBy(seedC.filter(r => agentChecked.has(r.agent)), r => r.chour);
+  const hrs = [...Array(24).keys()].filter(h => (mineH.get(h) || 0) + (grpH.get(h) || 0) > 0);
+  lineCmp('chDHour', hrs.map(h => h + '시'),
+    [{ name: agentSel, color: 'var(--s1)', values: hrs.map(h => mineH.get(h) || 0) },
+     { name: '선택 인원 평균', color: 'var(--s3)', dash: true, values: hrs.map(h => (grpH.get(h) || 0) / nGrp) }],
+    { unit: '건', decimals: 1, height: 300 });
+  // 처리결과 분포 (접수일 기준, 전체 결과)
+  const seedR = DATA.seed.filter(r => keySet.has(keyFn(r.date)));
+  const mineRe = countBy(seedR.filter(r => r.agent === agentSel), r => r.result);
+  const grpRe = countBy(seedR.filter(r => agentChecked.has(r.agent)), r => r.result);
+  const reList = [...new Set([...mineRe.keys(), ...grpRe.keys()])]
+    .map(k => ({ label: k, a: mineRe.get(k) || 0, b: (grpRe.get(k) || 0) / nGrp }))
+    .sort((x, y) => y.a - x.a || y.b - x.b).slice(0, 8);
+  hbarCompare('chDResult', reList, { aName: agentSel, bName: '선택 인원 평균' });
+  // 요일별 처리건수 (완료일 기준, 인정 O)
+  const seedD = DATA.seed.filter(r => r.cdate && r.af === 'O' && keySet.has(keyFn(r.cdate)));
+  const mineD = countBy(seedD.filter(r => r.agent === agentSel), r => dsToDate(r.cdate).getDay());
+  const grpD = countBy(seedD.filter(r => agentChecked.has(r.agent)), r => dsToDate(r.cdate).getDay());
+  hbarCompare('chDDow', [1, 2, 3, 4, 5, 6, 0].map(d => ({ label: DOW[d] + '요일', a: mineD.get(d) || 0, b: (grpD.get(d) || 0) / nGrp })),
+    { aName: agentSel, bName: '선택 인원 평균' });
+  // 증상·원인·조치 선택 비중 (조치사항 시트, 선택 기간, 비중 %)
+  const jW = DATA.jochi.filter(r => keySet.has(keyFn(r.date)));
+  const shareCmp = (id, field) => {
+    const mineJ = jW.filter(r => r.agent === agentSel && r[field]);
+    const grpJ = jW.filter(r => agentChecked.has(r.agent) && r[field]);
+    const mc = countBy(mineJ, r => r[field]), gc = countBy(grpJ, r => r[field]);
+    const items = [...new Set([...mc.keys(), ...gc.keys()])]
+      .map(k => ({ label: k, a: mineJ.length ? (mc.get(k) || 0) / mineJ.length * 100 : 0, b: grpJ.length ? (gc.get(k) || 0) / grpJ.length * 100 : 0 }))
+      .sort((x, y) => y.a - x.a || y.b - x.b).slice(0, 8);
+    hbarCompare(id, items, { aName: agentSel, bName: '선택 인원 평균', unit: '%', fmtA: v => fmt1(v) + '%', fmtB: v => fmt1(v) + '%' });
+  };
+  shareCmp('chDSym', 'sym');
+  shareCmp('chDCause', 'cause');
+  shareCmp('chDAct', 'act');
+  // 레이더: 조회 월 기준, 전체 점검자 평균 = 100%
+  const allStats = computeAgentStats(agentYm);
+  const meRow = allStats.find(x => x.name === agentSel);
+  const avgOf = arr => { const v = arr.filter(x => x != null && !isNaN(x)); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null; };
+  if (!meRow) {
+    $('chDRadar').innerHTML = '<div class="empty">조회 월에 점검 데이터가 없습니다</div>';
+    $('dRadarTable').innerHTML = '';
+  } else {
+    const attMine = DATA.attend.has(agentSel) ? DATA.attend.get(agentSel) : null;
+    const attAvg = avgOf(allStats.map(a => DATA.attend.has(a.name) ? DATA.attend.get(a.name) : null));
+    const ratio = (m, a2) => m == null ? null : (a2 ? m / a2 * 100 : (m === 0 ? 100 : 150));
+    const axes = [
+      { label: '점검량', mine: meRow.vol, avg: avgOf(allStats.map(a => a.vol)), f: fmt, unit: '건' },
+      { label: '리뷰점수', mine: meRow.score, avg: avgOf(allStats.map(a => a.score)), f: fmt1, unit: '점' },
+      { label: '선택동의율', mine: meRow.consent, avg: avgOf(allStats.map(a => a.consent)), f: fmt1, unit: '%' },
+      { label: 'M2설치율', mine: meRow.m2, avg: avgOf(allStats.map(a => a.m2)), f: fmt1, unit: '%' },
+      { label: '근태(지각)', mine: attMine, avg: attAvg, f: fmt1, unit: '회' },
+    ].map(a => Object.assign(a, { ratio: ratio(a.mine, a.avg) }));
+    radarChart('chDRadar', axes, agentSel);
+    $('dRadarTable').innerHTML = '<table class="list"><tr><th>지표</th><th style="text-align:right;">' + esc(agentSel) + '</th><th style="text-align:right;">전체 평균</th><th style="text-align:right;">평균 대비</th></tr>' +
+      axes.map(a => '<tr><td>' + a.label + '</td>' +
+        '<td class="num" style="text-align:right;font-weight:600;">' + (a.mine != null ? a.f(a.mine) + a.unit : '-') + '</td>' +
+        '<td class="num" style="text-align:right;">' + (a.avg != null ? a.f(a.avg) + a.unit : '-') + '</td>' +
+        '<td class="num" style="text-align:right;">' + (a.ratio != null ? '<b>' + Math.round(a.ratio) + '%</b>' : '-') + '</td></tr>').join('') +
+      '</table><div style="font-size:11.5px;color:var(--muted);margin-top:6px;">※ 근태(지각)는 현황 탭 AG열(지각 횟수) 기준 — 낮을수록 양호. 레이더·평균은 조회 월(' + agentYm.replace('-', '.') + ') 전체 점검자 기준.</div>';
+  }
+  // 3점 미만 리뷰 (선택 점검자 · 선택 기간)
+  const lowR = DATA.seed.filter(r => r.agent === agentSel && keySet.has(keyFn(r.date)) && r.score != null && r.score < 3)
+    .sort((a, b) => b.date.localeCompare(a.date)).slice(0, 20);
+  $('dLowInfo').textContent = '— ' + info;
+  $('dLowReviews').innerHTML = !lowR.length
+    ? '<div class="empty">해당 기간에 3점 미만 리뷰가 없습니다 🎉</div>'
+    : '<div style="overflow-x:auto;"><table class="list"><tr><th style="width:90px;">날짜</th><th style="width:110px;">SO</th><th style="width:110px;">처리결과</th><th style="width:50px;">점수</th><th>리뷰 내용</th><th style="width:90px;">고객명</th></tr>' +
+      lowR.map(r => {
+        const sj = DATA.sjMap.get(r.rpt) || {};
+        const txt = sj.rtext && sj.rtext !== '리뷰없음' ? sj.rtext : '(내용 없음)';
+        return '<tr><td class="num">' + r.date + '</td><td>' + esc(r.soG) + '</td><td>' + esc(r.result) + '</td>' +
+          '<td><span class="scorechip">' + r.score + '</span></td><td>' + esc(txt) + '</td><td>' + esc(r.cust || '-') + '</td></tr>';
+      }).join('') + '</table></div>';
+}
+
+/* ---------- 로우데이터 검색 (seed + seed(정산용) 병합) ---------- */
+let searchInit = false, searchRows = [];
+function initSearchFilters() {
+  const opts = (id, vals) => { $(id).innerHTML = '<option value="">전체</option>' + vals.map(v => '<option>' + esc(v) + '</option>').join(''); };
+  opts('sResult', [...new Set(DATA.seed.map(r => r.result))].sort());
+  opts('sMso', [...new Set(DATA.seed.map(r => r.mso))].sort());
+  opts('sSo', [...new Set(DATA.seed.map(r => r.soG))].sort()); // CNM 계열은 'CNM' 하나로 묶음
+  searchInit = true;
+}
+function runSearch() {
+  if (!DATA.seed.length) return;
+  if (!searchInit) initSearchFilters();
+  const val = id => $(id).value.trim();
+  const f = {
+    from: val('sFrom'), to: val('sTo'),
+    agent: val('sAgent').toLowerCase(), result: $('sResult').value, mso: $('sMso').value, so: $('sSo').value,
+    cust: val('sCust').toLowerCase(), custNo: val('sCustNo').toLowerCase(), rpt: val('sRpt').toLowerCase(), all: val('sAll').toLowerCase(),
+  };
+  const inc = (v, q) => (v || '').toLowerCase().includes(q);
+  const rows = DATA.seed.filter(r => {
+    if (f.from && r.date < f.from) return false;
+    if (f.to && r.date > f.to) return false;
+    if (f.agent && !inc(r.agent, f.agent)) return false;
+    if (f.result && r.result !== f.result) return false;
+    if (f.mso && r.mso !== f.mso) return false;
+    if (f.so && r.soG !== f.so) return false;
+    if (f.cust && !inc(r.cust, f.cust)) return false;
+    if (f.custNo && !inc(r.custNo, f.custNo)) return false;
+    if (f.rpt && !inc(r.rpt, f.rpt)) return false;
+    if (f.all) {
+      const sj = DATA.sjMap.get(r.rpt);
+      const hay = [r.date, r.agent, r.result, r.mso, r.so, r.soG, r.cust, r.custNo, r.rpt,
+        sj && sj.counselor, sj && sj.center, sj && sj.team, sj && sj.product, sj && sj.req, sj && sj.resultJ, sj && sj.rtext].filter(Boolean).join(' ').toLowerCase();
+      if (!hay.includes(f.all)) return false;
+    }
+    return true;
+  }).sort((a, b) => b.date.localeCompare(a.date) || (b.time || '').localeCompare(a.time || ''));
+  searchRows = rows.slice(0, 300);
+  $('sCount').textContent = '— ' + fmt(rows.length) + '건' + (rows.length > 300 ? ' (최신 300건 표시)' : '');
+  $('sDetail').innerHTML = '';
+  if (!searchRows.length) { $('sResults').innerHTML = '<div class="empty">조건에 맞는 데이터가 없습니다</div>'; return; }
+  const clip = (s, n) => { s = s || ''; return s.length > n ? esc(s.slice(0, n)) + '…' : esc(s); };
+  $('sResults').innerHTML =
+    '<table class="list" style="min-width:1400px;"><tr><th>접수일</th><th>시간</th><th>점검자</th><th>처리결과</th><th>MSO</th><th>SO</th>' +
+    '<th>고객명</th><th>가입번호</th><th>레포트번호</th><th>리뷰점수</th><th>상담사</th><th>요청내용(정산용)</th><th>처리결과(정산용)</th></tr>' +
+    searchRows.map((r, i) => {
+      const sj = DATA.sjMap.get(r.rpt) || {};
+      return '<tr class="srow" data-i="' + i + '"><td class="num">' + r.date + '</td><td class="num">' + esc(r.time || '') + '</td>' +
+        '<td>' + esc(r.agent) + '</td><td>' + esc(r.result) + '</td><td>' + esc(r.mso) + '</td><td>' + esc(r.soG) + '</td>' +
+        '<td>' + esc(r.cust) + '</td><td class="num">' + esc(r.custNo) + '</td><td class="num" style="font-size:11.5px;">' + esc(r.rpt) + '</td>' +
+        '<td class="num">' + (r.score != null ? r.score : '-') + '</td><td>' + esc(sj.counselor || '-') + '</td>' +
+        '<td title="' + esc(sj.req || '') + '">' + (clip(sj.req, 28) || '-') + '</td>' +
+        '<td title="' + esc(sj.resultJ || '') + '">' + (clip(sj.resultJ, 22) || '-') + '</td></tr>';
+    }).join('') + '</table>';
+  document.querySelectorAll('#sResults .srow').forEach(tr => tr.addEventListener('click', () => {
+    document.querySelectorAll('#sResults .srow').forEach(t => t.classList.toggle('sel', t === tr));
+    renderSearchDetail(+tr.dataset.i);
+  }));
+}
+function renderSearchDetail(i) {
+  const r = searchRows[i];
+  if (!r) { $('sDetail').innerHTML = ''; return; }
+  const sj = DATA.sjMap.get(r.rpt) || {};
+  const fld = (k, v) => '<tr><th style="width:110px;white-space:nowrap;">' + k + '</th><td>' + (v ? esc(v) : '-') + '</td></tr>';
+  $('sDetail').innerHTML = '<div class="card"><h3>📄 상세 — ' + esc(r.rpt || '(레포트번호 없음)') + '</h3>' +
+    '<div class="grid c2" style="margin-top:8px;"><div><table class="list">' +
+    fld('접수일시', r.date + ' ' + (r.time || '')) + fld('점검자명', r.agent) + fld('처리결과', r.result) +
+    fld('MSO / SO', r.mso + ' / ' + r.so) + fld('고객명', r.cust) + fld('가입번호', r.custNo) +
+    fld('리뷰점수', r.score != null ? r.score + '점' : (sj.score != null ? sj.score + '점' : '리뷰없음')) +
+    '</table></div><div><table class="list">' +
+    fld('상담사', sj.counselor) + fld('센터명', sj.center) + fld('소속팀', sj.team) + fld('사용상품', sj.product) +
+    fld('처리결과(정산용)', sj.resultJ) +
+    fld('리뷰내용', sj.rtext && sj.rtext !== '리뷰없음' ? sj.rtext : '-') +
+    '</table></div></div>' +
+    '<div style="margin-top:10px;"><div style="font-size:12px;color:var(--muted);margin-bottom:4px;">요청내용 (seed(정산용))</div>' +
+    '<div style="background:var(--page);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-size:13px;white-space:pre-wrap;">' + (sj.req ? esc(sj.req) : '- 정산용 데이터에 없는 건입니다 -') + '</div></div></div>';
+  $('sDetail').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+/* ---------- 조건 비교 (A vs B) ---------- */
+function initInflowControls() {
+  const sos = [...new Set(DATA.seed.map(r => r.soG))].sort();
+  ['inflowSo', 'cASo', 'cBSo'].forEach(id => { $(id).innerHTML = '<option value="">전체</option>' + sos.map(v => '<option>' + esc(v) + '</option>').join(''); });
+  const msos = [...new Set(DATA.seed.map(r => r.mso))].sort();
+  ['cAMso', 'cBMso'].forEach(id => { $(id).innerHTML = '<option value="">전체</option>' + msos.map(v => '<option>' + esc(v) + '</option>').join(''); });
+  // 기본 비교: A = 최근 30일, B = 직전 30일
+  const maxSeed = DATA.seed.reduce((m, r) => r.date > m ? r.date : m, '') || dateToDs(new Date());
+  const end = dsToDate(maxSeed);
+  $('cATo').value = dateToDs(end); $('cAFrom').value = dateToDs(addDays(end, -29));
+  $('cBTo').value = dateToDs(addDays(end, -30)); $('cBFrom').value = dateToDs(addDays(end, -59));
+}
+function cmpKpi(label, a, b, unit, fmtFn = fmt) {
+  const d = (a != null && b != null && b !== 0) ? (a - b) / b * 100 : null;
+  const box = (tag, color, v) =>
+    '<div style="flex:1;min-width:0;"><div style="font-size:11px;font-weight:700;color:' + color + ';">' + tag + '</div>' +
+    '<div style="font-size:22px;font-weight:700;letter-spacing:-.5px;">' + (v != null ? fmtFn(v) : '-') + '<small style="font-size:12px;font-weight:600;color:var(--ink2);margin-left:1px;">' + unit + '</small></div></div>';
+  return '<div class="kpi"><div class="k-label">' + label + '</div>' +
+    '<div style="display:flex;gap:12px;margin-top:4px;">' + box('조건 A', 'var(--s1)', a) + box('조건 B', 'var(--s3)', b) + '</div>' +
+    '<div class="k-sub">' + (d != null ? 'A가 B 대비 <b>' + (d >= 0 ? '+' : '') + d.toFixed(1) + '%</b>' : '비교 불가') + '</div></div>';
+}
+function renderCompare() {
+  const cond = p => ({ from: $(p + 'From').value, to: $(p + 'To').value, so: $(p + 'So').value, mso: $(p + 'Mso').value });
+  const A = cond('cA'), B = cond('cB');
+  const pick = f => DATA.seed.filter(r =>
+    (!f.from || r.date >= f.from) && (!f.to || r.date <= f.to) && (!f.so || r.soG === f.so) && (!f.mso || r.mso === f.mso));
+  const ra = pick(A), rb = pick(B);
+  const nm = f => (f.so || '전체SO') + (f.mso ? '·' + f.mso : '');
+  const nameA = '조건 A (' + nm(A) + ')', nameB = '조건 B (' + nm(B) + ')';
+  const days = f => (f.from && f.to) ? Math.round((dsToDate(f.to) - dsToDate(f.from)) / 86400000) + 1 : null;
+  const dA = days(A), dB = days(B);
+  const doneRate = rows => rows.length ? rows.filter(r => r.result === '원격 완료' || r.result === '전화 완료' || r.result === '점검완료').length / rows.length * 100 : null;
+  const opScore = rows => {
+    const b = rows.filter(r => r.al === '' && !r.so.includes('1833') && (r.result === '원격 완료' || r.result === 'A/S 접수'));
+    return b.length ? b.reduce((s, r) => s + (r.score || 0), 0) / b.length : null;
+  };
+  $('cmpKpis').innerHTML =
+    cmpKpi('총 인입', ra.length, rb.length, '건') +
+    cmpKpi('일평균 인입', dA ? ra.length / dA : null, dB ? rb.length / dB : null, '건', fmt1) +
+    cmpKpi('완료율', doneRate(ra), doneRate(rb), '%', fmt1) +
+    cmpKpi('평균 리뷰점수', opScore(ra), opScore(rb), '점', fmt1);
+  // 일별 추이 — 각 조건의 시작일 기준 n일차 정렬
+  const daily = (rows, f) => {
+    if (!f.from || !f.to) return [];
+    const m = countBy(rows, r => r.date);
+    const out = [];
+    for (let d = dsToDate(f.from); d <= dsToDate(f.to); d = addDays(d, 1)) out.push(m.get(dateToDs(d)) || 0);
+    return out;
+  };
+  const va = daily(ra, A), vb = daily(rb, B);
+  const nDays = Math.max(va.length, vb.length);
+  lineCmp('chCmpTrend', [...Array(nDays).keys()].map(i => (i + 1) + '일차'),
+    [{ name: nameA, color: 'var(--s1)', values: [...Array(nDays).keys()].map(i => i < va.length ? va[i] : null) },
+     { name: nameB, color: 'var(--s3)', dash: true, values: [...Array(nDays).keys()].map(i => i < vb.length ? vb[i] : null) }], { unit: '건', height: 260 });
+  // 시간대별
+  const hm = rows => countBy(rows.filter(r => r.hour != null), r => r.hour);
+  const ha = hm(ra), hb = hm(rb);
+  const hrs = [...Array(24).keys()].filter(h => (ha.get(h) || 0) + (hb.get(h) || 0) > 0);
+  lineCmp('chCmpHour', hrs.map(h => h + '시'),
+    [{ name: nameA, color: 'var(--s1)', values: hrs.map(h => ha.get(h) || 0) },
+     { name: nameB, color: 'var(--s3)', dash: true, values: hrs.map(h => hb.get(h) || 0) }], { unit: '건', height: 260 });
+  // 처리결과
+  const rm = countBy(ra, r => r.result), rbm = countBy(rb, r => r.result);
+  const results = [...new Set([...rm.keys(), ...rbm.keys()])]
+    .map(k => ({ label: k, a: rm.get(k) || 0, b: rbm.get(k) || 0 }))
+    .sort((x, y) => y.a - x.a).slice(0, 8);
+  hbarCompare('chCmpResult', results, { aName: nameA, bName: nameB });
+  // 요일별
+  const da = countBy(ra, r => dsToDate(r.date).getDay()), db = countBy(rb, r => dsToDate(r.date).getDay());
+  hbarCompare('chCmpDow', [0, 1, 2, 3, 4, 5, 6].map(d => ({ label: DOW[d], a: da.get(d) || 0, b: db.get(d) || 0 })), { aName: nameA, bName: nameB });
+}
+
+/* ── 2계열 비교 라인차트 (null = 구간 끊김) ── */
+function lineCmp(el, labels, series, opts = {}) {
+  const { unit = '건', height = 210, decimals = 0 } = opts;
+  el = typeof el === 'string' ? $(el) : el;
+  const allVals = series.flatMap(s => s.values.filter(v => v != null));
+  if (labels.length < 2 || !allVals.length) { el.innerHTML = '<div class="empty">데이터가 없습니다</div>'; return; }
+  const W = 900, H = height, mL = 44, mR = 10, mT = 12, mB = 26;
+  const pw = W - mL - mR, ph = H - mT - mB;
+  const max = niceMax(Math.max(...allVals));
+  const n = labels.length;
+  const X = i => mL + pw * i / (n - 1);
+  const Y = v => mT + ph - (max > 0 ? ph * v / max : 0);
+  const fv = v => v == null ? '-' : (decimals ? fmt1(v) : fmt(v));
+  let g = '';
+  for (let t = 0; t <= 4; t++) {
+    const y = mT + ph - ph * t / 4;
+    g += '<line x1="' + mL + '" y1="' + y + '" x2="' + (W - mR) + '" y2="' + y + '" stroke="var(--grid)" stroke-width="1"/>' +
+         '<text x="' + (mL - 6) + '" y="' + (y + 4) + '" text-anchor="end" font-size="10.5" fill="var(--muted)">' + (decimals ? fmt1(max * t / 4) : fmt(max * t / 4)) + '</text>';
+  }
+  let paths = '', dots = '';
+  series.forEach((s, si) => {
+    let d = '', pen = false;
+    s.values.forEach((v, i) => {
+      if (v == null) { pen = false; return; }
+      d += (pen ? 'L' : 'M') + X(i).toFixed(1) + ' ' + Y(v).toFixed(1) + ' ';
+      pen = true;
+    });
+    paths += '<path d="' + d.trim() + '" fill="none" stroke="' + s.color + '" stroke-width="2" stroke-linejoin="round"' + (s.dash ? ' stroke-dasharray="5 4"' : '') + '/>';
+    dots += '<circle class="dot d' + si + '" r="4" fill="' + s.color + '" stroke="var(--surface)" stroke-width="2" style="display:none;"/>';
+  });
+  const xEvery = Math.max(1, Math.ceil(n / 14));
+  let xlab = '';
+  labels.forEach((l, i) => { if (i % xEvery === 0) xlab += '<text x="' + X(i).toFixed(1) + '" y="' + (H - 8) + '" text-anchor="middle" font-size="10.5" fill="var(--muted)">' + esc(l) + '</text>'; });
+  const legend = '<div class="legend">' + series.map(s => '<span class="li"><span class="sw" style="background:' + s.color + '"></span>' + esc(s.name) + '</span>').join('') + '</div>';
+  el.innerHTML = legend + '<svg viewBox="0 0 ' + W + ' ' + H + '" style="width:100%;height:auto;display:block;">' + g +
+    '<line x1="' + mL + '" y1="' + (mT + ph) + '" x2="' + (W - mR) + '" y2="' + (mT + ph) + '" stroke="var(--axis)" stroke-width="1"/>' + paths +
+    '<line class="xh" x1="0" y1="' + mT + '" x2="0" y2="' + (mT + ph) + '" stroke="var(--axis)" stroke-width="1" style="display:none;"/>' + dots +
+    xlab + '<rect class="hit" x="' + mL + '" y="' + mT + '" width="' + pw + '" height="' + ph + '" fill="transparent"/></svg>' +
+    dataTable(labels, series.map(s => ({ name: s.name, values: s.values.map(v => v == null ? NaN : v) })));
+  const svg = el.querySelector('svg'), xh = svg.querySelector('.xh'), hit = svg.querySelector('.hit');
+  hit.addEventListener('mousemove', ev => {
+    const box = svg.getBoundingClientRect();
+    const mx = (ev.clientX - box.left) * (W / box.width);
+    const i = Math.max(0, Math.min(n - 1, Math.round((mx - mL) / (pw / (n - 1)))));
+    xh.setAttribute('x1', X(i)); xh.setAttribute('x2', X(i)); xh.style.display = '';
+    let html = '<div class="tt-title">' + esc(labels[i]) + '</div>';
+    series.forEach((s, si) => {
+      const dot = svg.querySelector('.dot.d' + si);
+      if (s.values[i] != null) { dot.setAttribute('cx', X(i)); dot.setAttribute('cy', Y(s.values[i])); dot.style.display = ''; }
+      else dot.style.display = 'none';
+      html += '<div class="tt-row"><span class="sw" style="background:' + s.color + '"></span>' + esc(s.name) + ' <b>' + fv(s.values[i]) + unit + '</b></div>';
+    });
+    showTT(html, ev);
+  });
+  hit.addEventListener('mouseleave', () => { xh.style.display = 'none'; svg.querySelectorAll('.dot').forEach(d => d.style.display = 'none'); hideTT(); });
+}
+
+/* ── 본인 vs 평균 비교 가로막대 ── */
+function hbarCompare(el, items, opts = {}) {
+  const { aName = '선택 점검자', bName = '선택 인원 평균', unit = '건', fmtA = fmt, fmtB = fmt1 } = opts;
+  el = typeof el === 'string' ? $(el) : el;
+  if (!items.length) { el.innerHTML = '<div class="empty">데이터가 없습니다</div>'; return; }
+  const max = Math.max(...items.flatMap(i => [i.a, i.b]), 0.001);
+  el.innerHTML = '<div class="legend"><span class="li"><span class="sw" style="background:var(--s1)"></span>' + esc(aName) + '</span>' +
+    '<span class="li"><span class="sw" style="background:var(--s3)"></span>' + esc(bName) + '</span></div>' +
+    items.map((it, i) => {
+      return '<div class="cmpgrp" data-i="' + i + '" style="padding:2px 0;border-radius:6px;">' +
+        '<div class="hrow" style="padding:1px 0;"><div class="hlabel" title="' + esc(it.label) + '">' + esc(it.label) + '</div>' +
+        '<div class="htrack" style="height:13px;"><div class="hfill" style="width:' + (it.a / max * 100).toFixed(2) + '%;height:13px;background:var(--s1);"></div></div>' +
+        '<div class="hval">' + fmtA(it.a) + '</div></div>' +
+        '<div class="hrow" style="padding:1px 0;"><div class="hlabel"></div>' +
+        '<div class="htrack" style="height:9px;"><div class="hfill" style="width:' + (it.b / max * 100).toFixed(2) + '%;height:9px;background:var(--s3);opacity:.85;"></div></div>' +
+        '<div class="hval" style="color:var(--muted);">' + fmtB(it.b) + '</div></div></div>';
+    }).join('');
+  el.querySelectorAll('.cmpgrp').forEach(gr => {
+    const it = items[+gr.dataset.i];
+    gr.addEventListener('mousemove', ev => showTT('<div class="tt-title">' + esc(it.label) + '</div>' +
+      '<div class="tt-row"><span class="sw" style="background:var(--s1)"></span>' + esc(aName) + ' <b>' + fmtA(it.a) + unit + '</b></div>' +
+      '<div class="tt-row"><span class="sw" style="background:var(--s3)"></span>' + esc(bName) + ' <b>' + fmtB(it.b) + unit + '</b></div>', ev));
+    gr.addEventListener('mouseleave', hideTT);
+  });
+}
+
+/* ── 레이더(오각형) 차트: 전체 점검자 평균 = 100% 기준 ── */
+function radarChart(el, axes, mineName) {
+  el = typeof el === 'string' ? $(el) : el;
+  const n = axes.length;
+  if (!n) { el.innerHTML = '<div class="empty">데이터 없음</div>'; return; }
+  const W = 420, H = 350, cx = W / 2, cy = H / 2 + 8, R = 112, CAP = 170;
+  const ang = i => -Math.PI / 2 + i * 2 * Math.PI / n;
+  const pt = (i, r) => [cx + Math.cos(ang(i)) * r, cy + Math.sin(ang(i)) * r];
+  let rings = '';
+  [50, 100, 150].forEach(lv => {
+    const pts = axes.map((_, i) => pt(i, R * lv / CAP).map(x => x.toFixed(1)).join(',')).join(' ');
+    rings += '<polygon points="' + pts + '" fill="none" stroke="' + (lv === 100 ? 'var(--s3)' : 'var(--grid)') + '" stroke-width="' + (lv === 100 ? 1.5 : 1) + '"' + (lv === 100 ? ' stroke-dasharray="4 3"' : '') + '/>';
+  });
+  let spokes = '', labels = '';
+  axes.forEach((a, i) => {
+    const [x, y] = pt(i, R);
+    spokes += '<line x1="' + cx + '" y1="' + cy + '" x2="' + x.toFixed(1) + '" y2="' + y.toFixed(1) + '" stroke="var(--grid)" stroke-width="1"/>';
+    const [lx, ly] = pt(i, R + 30);
+    const anchor = Math.abs(lx - cx) < 12 ? 'middle' : (lx > cx ? 'start' : 'end');
+    labels += '<text x="' + lx.toFixed(1) + '" y="' + (ly - 1).toFixed(1) + '" text-anchor="' + anchor + '" font-size="11.5" font-weight="600" fill="var(--ink)">' + esc(a.label) + '</text>' +
+      '<text x="' + lx.toFixed(1) + '" y="' + (ly + 12).toFixed(1) + '" text-anchor="' + anchor + '" font-size="10.5" fill="var(--muted)">' + (a.ratio != null ? Math.round(a.ratio) + '%' : '-') + '</text>';
+  });
+  const capped = axes.map(a => a.ratio != null ? Math.max(0, Math.min(a.ratio, CAP)) : 0);
+  const agentPts = capped.map((v, i) => pt(i, R * v / CAP).map(x => x.toFixed(1)).join(',')).join(' ');
+  el.innerHTML = '<svg viewBox="0 0 ' + W + ' ' + H + '" style="width:100%;height:auto;display:block;">' +
+    rings + spokes +
+    '<polygon points="' + agentPts + '" fill="var(--s1)" opacity="0.18"/>' +
+    '<polygon points="' + agentPts + '" fill="none" stroke="var(--s1)" stroke-width="2" stroke-linejoin="round"/>' +
+    capped.map((v, i) => { const [x, y] = pt(i, R * v / CAP); return '<circle cx="' + x.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="3.5" fill="var(--s1)" stroke="var(--surface)" stroke-width="1.5"/>'; }).join('') +
+    labels + '</svg>' +
+    '<div class="legend" style="margin-top:2px;"><span class="li"><span class="sw" style="background:var(--s1)"></span>' + esc(mineName || '선택 점검자') + '</span>' +
+    '<span class="li"><span class="sw" style="background:var(--s3)"></span>전체 평균 = 100% (점선)</span></div>';
+}
+
+/* (원격·주치의 섹션은 제거됨 — remote/실시간/컴퓨터주치의 데이터는 점검자 분석 집계에 사용) */
+
+/* ---------- 값 기반 엑셀(xlsx) 생성 ----------
+   구글 원본 xlsx 내보내기는 수식이 그대로 담기고 단일 탭 내보내기 시 타 탭 참조가 #REF!로 깨짐.
+   → CSV(계산된 값)를 받아 값만 담은 xlsx를 브라우저에서 직접 생성 */
+const CRC_TABLE = (() => {
+  const t = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1); t[n] = c >>> 0; }
+  return t;
+})();
+function crc32(u8) {
+  let c = 0xFFFFFFFF;
+  for (let i = 0; i < u8.length; i++) c = CRC_TABLE[(c ^ u8[i]) & 0xFF] ^ (c >>> 8);
+  return (c ^ 0xFFFFFFFF) >>> 0;
+}
+async function makeZip(files) { // files: [{name, data:Uint8Array}]
+  const parts = [], central = [];
+  let offset = 0;
+  const canDeflate = typeof CompressionStream === 'function';
+  for (const f of files) {
+    const nameB = new TextEncoder().encode(f.name);
+    const crc = crc32(f.data);
+    let method = 0, comp = f.data;
+    if (canDeflate) {
+      try {
+        comp = new Uint8Array(await new Response(new Blob([f.data]).stream().pipeThrough(new CompressionStream('deflate-raw'))).arrayBuffer());
+        method = 8;
+      } catch (e) { comp = f.data; method = 0; }
+    }
+    const lh = new DataView(new ArrayBuffer(30));
+    lh.setUint32(0, 0x04034b50, true); lh.setUint16(4, 20, true); lh.setUint16(6, 0x0800, true);
+    lh.setUint16(8, method, true); lh.setUint16(10, 0, true); lh.setUint16(12, 0x21, true);
+    lh.setUint32(14, crc, true); lh.setUint32(18, comp.length, true); lh.setUint32(22, f.data.length, true);
+    lh.setUint16(26, nameB.length, true); lh.setUint16(28, 0, true);
+    parts.push(lh.buffer, nameB, comp);
+    central.push({ nameB, crc, method, csize: comp.length, usize: f.data.length, offset });
+    offset += 30 + nameB.length + comp.length;
+  }
+  const cdStart = offset;
+  for (const e of central) {
+    const ch = new DataView(new ArrayBuffer(46));
+    ch.setUint32(0, 0x02014b50, true); ch.setUint16(4, 20, true); ch.setUint16(6, 20, true);
+    ch.setUint16(8, 0x0800, true); ch.setUint16(10, e.method, true); ch.setUint16(12, 0, true); ch.setUint16(14, 0x21, true);
+    ch.setUint32(16, e.crc, true); ch.setUint32(20, e.csize, true); ch.setUint32(24, e.usize, true);
+    ch.setUint16(28, e.nameB.length, true);
+    ch.setUint32(42, e.offset, true);
+    parts.push(ch.buffer, e.nameB);
+    offset += 46 + e.nameB.length;
+  }
+  const eocd = new DataView(new ArrayBuffer(22));
+  eocd.setUint32(0, 0x06054b50, true);
+  eocd.setUint16(8, central.length, true); eocd.setUint16(10, central.length, true);
+  eocd.setUint32(12, offset - cdStart, true); eocd.setUint32(16, cdStart, true);
+  parts.push(eocd.buffer);
+  return new Blob(parts, { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+}
+function colA1(i) { let s = ''; i++; while (i) { i--; s = String.fromCharCode(65 + i % 26) + s; i = (i / 26) | 0; } return s; }
+function xmlEsc(s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, ''); }
+function cellNumber(s) { // 숫자로 안전하게 변환 가능한 값만 (선행 0·자릿수 초과는 문자열 유지)
+  if (!/^-?(\d{1,3}(,\d{3})+|\d+)(\.\d+)?$/.test(s)) return null;
+  const t = s.replace(/,/g, '');
+  if (/^-?0\d/.test(t)) return null;
+  if (t.replace(/[-.]/g, '').length > 15) return null;
+  return t;
+}
+/* 엑셀 날짜 직렬값 (1899-12-30 기준) */
+function excelSerial(y, m, d) { return Math.round((Date.UTC(y, m - 1, d) - Date.UTC(1899, 11, 30)) / 86400000); }
+function dateCellFromStr(s) { // 'YYYY-MM-DD' / 'YYYY. M. D' → 날짜 셀
+  const m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(s) || /^(\d{4})\.\s*(\d{1,2})\.\s*(\d{1,2})\.?$/.exec(s);
+  if (!m) return null;
+  return { d: excelSerial(+m[1], +m[2], +m[3]), s: 1 };
+}
+/* 보고 시트 상단의 'MM/DD'·'YYYY/MM' 헤더를 실제 날짜 셀로 변환 (값 붙여넣기 시 템플릿 날짜가 깨지지 않도록) */
+function fixDateHeaders(rows) {
+  const findYear = ri => {
+    for (const c of rows[ri] || []) {
+      const v = typeof c === 'string' ? c.trim() : '';
+      if (/^(19|20)\d{2}$/.test(v)) return +v;
+    }
+    return new Date().getFullYear();
+  };
+  for (let ri = 0; ri < Math.min(rows.length, 3); ri++) {
+    const year = findYear(ri);
+    const row = rows[ri];
+    for (let ci = 0; ci < row.length; ci++) {
+      const v = typeof row[ci] === 'string' ? row[ci].trim() : '';
+      let m;
+      if ((m = /^(\d{4})\/(\d{1,2})$/.exec(v))) row[ci] = { d: excelSerial(+m[1], +m[2], 1), s: 1 };
+      else if ((m = /^(\d{1,2})\/(\d{1,2})$/.exec(v))) row[ci] = { d: excelSerial(year, +m[1], +m[2]), s: 2 };
+    }
+  }
+  return rows;
+}
+function pctNumber(s) { // '22%', '14.5%' → '0.22', '0.145'
+  if (!/^-?(\d{1,3}(,\d{3})+|\d+)(\.\d+)?%$/.test(s)) return null;
+  const n = parseFloat(s.replace(/[,%]/g, '')) / 100;
+  return isNaN(n) ? null : String(n);
+}
+/* s: 스타일 인덱스 강제 지정(템플릿 셀 서식 유지용). dateXf/mmddXf/pctXf: 날짜·퍼센트 서식 스타일 인덱스 */
+function cellXml(ref, v, s, dateXf = 1, mmddXf = 2, pctXf = 3) {
+  const sAttr = s != null ? ' s="' + s + '"' : '';
+  if (v == null || v === '') return s != null ? '<c r="' + ref + '"' + sAttr + '/>' : '';
+  if (typeof v === 'object' && v.d != null) {
+    return '<c r="' + ref + '" s="' + (s != null ? s : (v.s === 2 ? mmddXf : dateXf)) + '"><v>' + v.d + '</v></c>';
+  }
+  const str = String(v), t = str.trim();
+  const dc = dateCellFromStr(t);
+  if (dc) return '<c r="' + ref + '" s="' + (s != null ? s : dateXf) + '"><v>' + dc.d + '</v></c>';
+  const num = cellNumber(t);
+  if (num != null) return '<c r="' + ref + '"' + sAttr + '><v>' + num + '</v></c>';
+  const pct = pctNumber(t);
+  if (pct != null) return '<c r="' + ref + '" s="' + (s != null ? s : pctXf) + '"><v>' + pct + '</v></c>';
+  return '<c r="' + ref + '"' + sAttr + ' t="inlineStr"><is><t xml:space="preserve">' + xmlEsc(str) + '</t></is></c>';
+}
+const XLSX_STYLES = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><numFmts count="2"><numFmt numFmtId="164" formatCode="yyyy-mm-dd"/><numFmt numFmtId="165" formatCode="mm/dd"/></numFmts><fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="1"><border/></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="4"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/><xf numFmtId="165" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/><xf numFmtId="10" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>';
+async function xlsxBlob(sheets) { // sheets: [{name, rows}]
+  const enc = s => new TextEncoder().encode(s);
+  const safe = n => xmlEsc(String(n).replace(/[\[\]:*?\/\\]/g, '').slice(0, 31)) || 'Sheet';
+  const files = [];
+  let overrides = '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>';
+  let sheetTags = '', relTags = '';
+  sheets.forEach((sh, i) => {
+    const n = i + 1;
+    overrides += '<Override PartName="/xl/worksheets/sheet' + n + '.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>';
+    sheetTags += '<sheet name="' + safe(sh.name) + '" sheetId="' + n + '" r:id="rId' + n + '"/>';
+    relTags += '<Relationship Id="rId' + n + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet' + n + '.xml"/>';
+    const xml = ['<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>'];
+    sh.rows.forEach((row, ri) => {
+      let cells = '';
+      row.forEach((v, ci) => { cells += cellXml(colA1(ci) + (ri + 1), v); });
+      if (cells) xml.push('<row r="' + (ri + 1) + '">' + cells + '</row>');
+    });
+    xml.push('</sheetData></worksheet>');
+    files.push({ name: 'xl/worksheets/sheet' + n + '.xml', data: enc(xml.join('')) });
+  });
+  relTags += '<Relationship Id="rId' + (sheets.length + 1) + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>';
+  files.unshift(
+    { name: '[Content_Types].xml', data: enc('<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/>' + overrides + '</Types>') },
+    { name: '_rels/.rels', data: enc('<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>') },
+    { name: 'xl/workbook.xml', data: enc('<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>' + sheetTags + '</sheets></workbook>') },
+    { name: 'xl/_rels/workbook.xml.rels', data: enc('<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' + relTags + '</Relationships>') },
+    { name: 'xl/styles.xml', data: enc(XLSX_STYLES) },
+  );
+  return makeZip(files);
+}
+async function fetchTabRows(gid) {
+  const res = await fetch(SHEET_URL + '/export?format=csv&gid=' + gid);
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  const rows = parseCSV(await res.text());
+  while (rows.length && rows[rows.length - 1].every(c => !c || !c.trim())) rows.pop();
+  return rows;
+}
+
+/* LG리뷰보고 탭 → 점수가 있는 리뷰만, 날짜·시간 내림차순 */
+async function fetchLgReviews() {
+  const rows = await fetchTabRows(926644026);
+  const H = rows[0].map(h => String(h || ''));
+  const iD = colIdx(H, '접수일자', 0), iT = colIdx(H, '접수시간', 1), iS = colIdx(H, '리뷰점수', 2), iR = colIdx(H, '리뷰', 3), iSo = colIdx(H, 'so', 4);
+  return rows.slice(1).map(r => ({
+    date: (r[iD] || '').trim(), time: (r[iT] || '').trim(),
+    score: parseNum((r[iS] || '').trim()),
+    review: (r[iR] || '').trim(), so: (r[iSo] || '').trim().toUpperCase()
+  })).filter(r => r.date && r.score != null)
+    .sort((a, b) => b.date.localeCompare(a.date) || b.time.localeCompare(a.time));
+}
+
+/* ---------- 기존 엑셀 파일(템플릿)에 값만 주입 ----------
+   보고 파일의 서식·다른 시트·수식을 그대로 유지한 채 지정 시트의 값만 교체한다. */
+const TEMPLATE_DIR = '대시보드 템플릿';
+const TEMPLATE_FILES = {
+  '일보': '기술실적관리.xlsx',
+  '홈보고': 'LGU+_원격점검현황.xlsx',
+  '소호보고': 'LGU+소호_원격점검현황.xlsx',
+};
+const templateCache = {};
+
+async function readZip(buf) {
+  const dv = new DataView(buf), u8 = new Uint8Array(buf), td = new TextDecoder();
+  let eocd = -1;
+  for (let i = buf.byteLength - 22; i >= Math.max(0, buf.byteLength - 22 - 65557); i--) {
+    if (dv.getUint32(i, true) === 0x06054b50) { eocd = i; break; }
+  }
+  if (eocd < 0) throw new Error('올바른 엑셀(zip) 파일이 아닙니다');
+  const count = dv.getUint16(eocd + 10, true);
+  let off = dv.getUint32(eocd + 16, true);
+  const out = [];
+  for (let n = 0; n < count; n++) {
+    if (dv.getUint32(off, true) !== 0x02014b50) throw new Error('zip 목록이 손상되었습니다');
+    const method = dv.getUint16(off + 10, true);
+    const csize = dv.getUint32(off + 20, true);
+    const nameLen = dv.getUint16(off + 28, true), extraLen = dv.getUint16(off + 30, true), commentLen = dv.getUint16(off + 32, true);
+    const lho = dv.getUint32(off + 42, true);
+    const name = td.decode(u8.subarray(off + 46, off + 46 + nameLen));
+    const dataStart = lho + 30 + dv.getUint16(lho + 26, true) + dv.getUint16(lho + 28, true);
+    const comp = u8.subarray(dataStart, dataStart + csize);
+    let data;
+    if (method === 0) data = comp.slice();
+    else if (method === 8) data = new Uint8Array(await new Response(new Blob([comp]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).arrayBuffer());
+    else throw new Error('지원하지 않는 압축 방식: ' + method);
+    out.push({ name, data });
+    off += 46 + nameLen + extraLen + commentLen;
+  }
+  return out;
+}
+
+async function loadTemplate(report) {
+  if (templateCache[report]) return templateCache[report];
+  const path = TEMPLATE_DIR + '/' + TEMPLATE_FILES[report];
+  let res = null;
+  try { res = await fetch(encodeURI(path).replace(/\+/g, '%2B')); } catch (e) { /* 네트워크/차단 */ }
+  if (!res || !res.ok) throw new Error('템플릿 파일을 찾을 수 없습니다 — 대시보드 HTML과 같은 폴더의 「' + TEMPLATE_DIR + '」 폴더에 "' + TEMPLATE_FILES[report] + '" 파일이 있어야 합니다. 보고 양식이 바뀌면 그 파일을 최신본으로 교체해 주세요.');
+  templateCache[report] = await readZip(await res.arrayBuffer());
+  return templateCache[report];
+}
+
+function colToIdx(letters) { let n = 0; for (const ch of letters) n = n * 26 + (ch.charCodeAt(0) - 64); return n - 1; }
+
+function findSheetPath(files, sheetName) {
+  const td = new TextDecoder();
+  const get = n => { const f = files.find(x => x.name === n); return f ? td.decode(f.data) : ''; };
+  const wb = get('xl/workbook.xml');
+  let rid = null, m;
+  const re = /<sheet\b[^>]*\/?>/g;
+  while ((m = re.exec(wb))) {
+    const nm = /name="([^"]*)"/.exec(m[0]);
+    if (nm && nm[1] === sheetName) { rid = (/r:id="([^"]*)"/.exec(m[0]) || [])[1]; break; }
+  }
+  if (!rid) throw new Error('템플릿에 「' + sheetName + '」 시트가 없습니다');
+  const rels = get('xl/_rels/workbook.xml.rels');
+  const rre = /<Relationship\b[^>]*\/?>/g;
+  while ((m = rre.exec(rels))) {
+    if ((/Id="([^"]*)"/.exec(m[0]) || [])[1] === rid) {
+      let t = (/Target="([^"]*)"/.exec(m[0]) || [])[1];
+      return t.startsWith('/') ? t.slice(1) : 'xl/' + t;
+    }
+  }
+  throw new Error('시트 경로를 찾을 수 없습니다: ' + sheetName);
+}
+
+/* styles.xml에 날짜 서식(yyyy-mm-dd, mm/dd) 스타일을 추가하고 인덱스 반환 */
+function patchStyles(xml) {
+  const NF = '<numFmt numFmtId="190" formatCode="yyyy-mm-dd"/><numFmt numFmtId="191" formatCode="mm/dd"/>';
+  if (/<numFmts\b/.test(xml)) xml = xml.replace(/<numFmts count="(\d+)"([^>]*)>/, (s, c, rest) => '<numFmts count="' + (+c + 2) + '"' + rest + '>' + NF);
+  else xml = xml.replace(/(<styleSheet[^>]*>)/, '$1<numFmts count="2">' + NF + '</numFmts>');
+  let dateXf = 1, mmddXf = 2, pctXf = 3;
+  xml = xml.replace(/<cellXfs count="(\d+)"([^>]*)>([\s\S]*?)<\/cellXfs>/, (s, c, rest, body) => {
+    dateXf = +c; mmddXf = +c + 1; pctXf = +c + 2;
+    return '<cellXfs count="' + (+c + 3) + '"' + rest + '>' + body +
+      '<xf numFmtId="190" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>' +
+      '<xf numFmtId="191" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>' +
+      '<xf numFmtId="10" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/></cellXfs>';
+  });
+  return { xml, dateXf, mmddXf, pctXf };
+}
+
+/* 시트 XML의 sheetData만 새 값으로 교체 — 각 셀·행의 기존 스타일(s, 행높이)은 유지 */
+function injectSheetData(xml, rows, opts) {
+  const { truncate = false, patternRow = 0, dateXf, mmddXf, pctXf } = opts;
+  const sdm = /<sheetData\b[^>]*>[\s\S]*?<\/sheetData>|<sheetData\b[^>]*\/>/.exec(xml);
+  if (!sdm) throw new Error('sheetData를 찾을 수 없습니다');
+  const body = sdm[0].endsWith('/>') ? '' : sdm[0].replace(/^<sheetData\b[^>]*>/, '').replace(/<\/sheetData>$/, '');
+  const rowAttrs = {}, cellStyles = {};
+  let maxRow = 0, m;
+  const rowRe = /<row\b([^>]*?)(?:\/>|>([\s\S]*?)<\/row>)/g;
+  while ((m = rowRe.exec(body))) {
+    const rM = /\br="(\d+)"/.exec(m[1]);
+    if (!rM) continue;
+    const r = +rM[1];
+    maxRow = Math.max(maxRow, r);
+    rowAttrs[r] = m[1].replace(/\br="\d+"/, '').replace(/\bspans="[^"]*"/, '').trim();
+    const cells = {};
+    const cellRe = /<c\b([^>]*?)(?:\/>|>[\s\S]*?<\/c>)/g;
+    let cm;
+    while ((cm = cellRe.exec(m[2] || ''))) {
+      const ref = /\br="([A-Z]+)\d+"/.exec(cm[1]);
+      if (ref) cells[ref[1]] = (/\bs="(\d+)"/.exec(cm[1]) || [])[1];
+    }
+    cellStyles[r] = cells;
+  }
+  const patternCells = cellStyles[patternRow] || {};
+  const nRows = truncate ? rows.length : Math.max(rows.length, maxRow);
+  const out = [];
+  for (let r = 1; r <= nRows; r++) {
+    const vals = rows[r - 1] || [];
+    const tcells = cellStyles[r] || (r > maxRow ? patternCells : {});
+    const attrs = rowAttrs[r] != null ? rowAttrs[r] : (r > maxRow ? (rowAttrs[patternRow] || '') : '');
+    const colSet = new Set(Object.keys(tcells).map(colToIdx));
+    vals.forEach((v, ci) => { if (v !== '' && v != null) colSet.add(ci); });
+    let cells = '';
+    for (const ci of [...colSet].sort((a, b) => a - b)) {
+      const letter = colA1(ci);
+      const s = letter in tcells && tcells[letter] != null ? +tcells[letter] : undefined;
+      cells += cellXml(letter + r, vals[ci], s, dateXf, mmddXf, pctXf);
+    }
+    if (cells || attrs) out.push('<row r="' + r + '"' + (attrs ? ' ' + attrs : '') + '>' + cells + '</row>');
+  }
+  return xml.slice(0, sdm.index) + '<sheetData>' + out.join('') + '</sheetData>' + xml.slice(sdm.index + sdm[0].length);
+}
+
+/* 템플릿 엔트리 + 시트 사양 → 완성된 xlsx Blob */
+async function buildFromTemplate(entries, specs) {
+  const td = new TextDecoder(), te = new TextEncoder();
+  const files = entries.filter(e => e.name !== 'xl/calcChain.xml').map(e => ({ name: e.name, data: e.data }));
+  const get = n => files.find(f => f.name === n);
+  // calcChain 제거 흔적 정리 + 열 때 전체 재계산 (다른 시트 수식이 새 값으로 갱신되도록)
+  const ct = get('[Content_Types].xml');
+  ct.data = te.encode(td.decode(ct.data).replace(/<Override[^>]*calcChain[^>]*\/>/g, ''));
+  const wrels = get('xl/_rels/workbook.xml.rels');
+  wrels.data = te.encode(td.decode(wrels.data).replace(/<Relationship[^>]*calcChain[^>]*\/>/g, ''));
+  const wbf = get('xl/workbook.xml');
+  let wbXml = td.decode(wbf.data);
+  if (/<calcPr\b/.test(wbXml)) wbXml = wbXml.replace(/<calcPr\b([^>]*?)\/?>/, (s, a) => '<calcPr' + a.replace(/\sfullCalcOnLoad="[^"]*"/, '') + ' fullCalcOnLoad="1"/>');
+  else wbXml = wbXml.replace('</sheets>', '</sheets><calcPr fullCalcOnLoad="1"/>');
+  wbf.data = te.encode(wbXml);
+  // 날짜 서식 스타일 추가
+  const st = get('xl/styles.xml');
+  const patched = patchStyles(td.decode(st.data));
+  st.data = te.encode(patched.xml);
+  // 시트별 값 주입
+  for (const spec of specs) {
+    const f = get(findSheetPath(files, spec.sheet));
+    f.data = te.encode(injectSheetData(td.decode(f.data), spec.rows, {
+      truncate: spec.truncate, patternRow: spec.patternRow || 0,
+      dateXf: patched.dateXf, mmddXf: patched.mmddXf, pctXf: patched.pctXf,
+    }));
+  }
+  return makeZip(files);
+}
+
+/* 보고서별 구성 — 기존 보고 파일 서식을 유지한 채 값만 교체 */
+const REPORT_COMPOSERS = {
+  '일보': async () => {
+    const [rows, tpl] = await Promise.all([fetchTabRows(1179299741), loadTemplate('일보')]);
+    // 파일명 날짜: Y5~BC5(일)·Y6~BC6(일별 건수)에서 값이 5 이상인 마지막 날짜 (당일 미집계·휴일 소량 건 제외)
+    const year = parseInt((rows[1] || [])[0]) || new Date().getFullYear();
+    const month = parseInt((rows[1] || [])[1]) || new Date().getMonth() + 1;
+    let tag = dateToDs(new Date()).replace(/-/g, '');
+    const days = rows[4] || [], vals = rows[5] || [];
+    for (let ci = 54; ci >= 24; ci--) { // Y열(25번째)=idx24 ~ BC열(55번째)=idx54
+      const day = parseInt(String(days[ci] || '').trim());
+      const v = parseFloat(String(vals[ci] || '').trim());
+      if (day && !isNaN(v) && v >= 5) { tag = '' + year + pad2(month) + pad2(day); break; }
+    }
+    fixDateHeaders(rows);
+    const blob = await buildFromTemplate(tpl, [{ sheet: '연간실적상세', rows }]);
+    return { blob, filename: '기술 실적 관리-' + tag + '.xlsx' };
+  },
+  '홈보고': async () => {
+    const [rows, reviews, tpl] = await Promise.all([fetchTabRows(1888068093), fetchLgReviews(), loadTemplate('홈보고')]);
+    fixDateHeaders(rows);
+    const rv = reviews.filter(r => r.so === 'HOME');
+    const sheet2 = [['No.', '접수일자', '접수시간', '리뷰점수', '리뷰']]
+      .concat(rv.map((r, i) => [String(i + 1), r.date, r.time, String(r.score), r.review]));
+    const blob = await buildFromTemplate(tpl, [
+      { sheet: '통계', rows },
+      { sheet: '고객만족후기', rows: sheet2, truncate: true, patternRow: 3 },
+    ]);
+    return { blob, filename: '2026년_공유용_LG_U+_원격점검현황.xlsx' };
+  },
+  '소호보고': async () => {
+    const [rows, reviews, tpl] = await Promise.all([fetchTabRows(1990450613), fetchLgReviews(), loadTemplate('소호보고')]);
+    fixDateHeaders(rows);
+    const rv = reviews.filter(r => r.so === 'SOHO' || r.so === 'SME');
+    const sheet2 = [[], ['', 'LGU+ 스마트원격진단 소호/SME 고객만족후기'], [],
+      ['', 'NO', '접수일자', '접수시간', '점수', '후기내용', 'SOHO/SME구분']]
+      .concat(rv.map((r, i) => ['', String(i + 1), r.date, r.time, String(r.score), r.review, r.so]));
+    const blob = await buildFromTemplate(tpl, [
+      { sheet: '전체현황', rows },
+      { sheet: '만족후기', rows: sheet2, truncate: true, patternRow: 6 },
+    ]);
+    return { blob, filename: '2026년_공유용_LGU+소호_원격점검현황.xlsx' };
+  },
+};
+
+async function downloadTabAsXlsx(gid, name, btn) {
+  const orig = btn.textContent;
+  btn.textContent = '내려받는 중…'; btn.style.pointerEvents = 'none';
+  try {
+    const composer = REPORT_COMPOSERS[name];
+    let blob, filename;
+    if (composer) {
+      ({ blob, filename } = await composer());
+    } else {
+      blob = await xlsxBlob([{ name, rows: await fetchTabRows(gid) }]);
+      filename = name + '_' + dateToDs(new Date()) + '.xlsx';
+    }
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+  } catch (e) {
+    alert('다운로드 실패: ' + e.message);
+  } finally {
+    btn.textContent = orig; btn.style.pointerEvents = '';
+  }
+}
+
+/* ---------- 보고서 내보내기 ---------- */
+function renderExports() {
+  $('exports').innerHTML = REPORT_TABS.map(t =>
+    '<div class="exp"><div class="name">📊 ' + t.name + '</div><div class="desc">' + t.desc + '</div><div class="row">' +
+    '<button class="btn primary btn-xlsx" data-gid="' + t.gid + '" data-name="' + t.name + '">⬇ 엑셀 다운로드</button>' +
+    '<a class="btn" target="_blank" rel="noopener" href="' + SHEET_URL + '/edit#gid=' + t.gid + '">시트에서 보기</a></div></div>'
+  ).join('');
+  $('rawlinks').innerHTML = '로우데이터 다운로드(값 변환 xlsx): ' +
+    RAW_LINK_TABS.map(([n, g]) => '<a href="#" class="btn-xlsx" data-gid="' + g + '" data-name="' + n + '">' + n + '</a>').join('') +
+    ' · <a href="' + SHEET_URL + '/export?format=xlsx">전체 시트(원본, 수식 포함)</a>';
+  document.querySelectorAll('.btn-xlsx').forEach(b => b.addEventListener('click', ev => {
+    ev.preventDefault();
+    downloadTabAsXlsx(+b.dataset.gid, b.dataset.name, b);
+  }));
+}
+
+/* ---------- 로딩 ---------- */
+async function loadAll() {
+  $('overlay').style.display = 'flex';
+  $('errbar').style.display = 'none';
+  const keys = Object.keys(RAW_TABS);
+  $('loadList').innerHTML = keys.map(k => '<li id="ld-' + k + '">' + RAW_TABS[k].label + ' <span class="st">대기</span></li>').join('');
+  const results = await Promise.allSettled(keys.map(async k => {
+    const li = $('ld-' + k);
+    li.querySelector('.st').textContent = '불러오는 중…';
+    try {
+      const rows = await loadTab(k);
+      normalize(k, rows);
+      li.className = 'done';
+      li.querySelector('.st').textContent = '✓ ' + fmt(DATA[k].length) + '건';
+    } catch (e) {
+      li.className = 'fail';
+      li.querySelector('.st').textContent = '✗ 실패';
+      throw new Error(RAW_TABS[k].label + ': ' + e.message);
+    }
+  }));
+  const fails = results.filter(r => r.status === 'rejected');
+  if (fails.length) {
+    const bar = $('errbar');
+    bar.style.display = 'block';
+    const isFile = location.protocol === 'file:';
+    bar.innerHTML = '⚠ 일부 데이터를 불러오지 못했습니다 — ' + fails.map(f => esc(f.reason.message)).join(' / ') +
+      ' &nbsp;<a href="#" onclick="loadAll();return false;">다시 시도</a>' +
+      '<div style="color:var(--muted);font-size:12px;margin-top:2px;">' +
+      (isFile
+        ? '이 파일을 직접 더블클릭해 열면(file://) 브라우저 보안 정책 때문에 구글시트 데이터를 가져올 수 없습니다. 같은 폴더의 <b>「대시보드 실행.bat」</b>을 더블클릭해서 열어 주세요.'
+        : '시트 공유 설정이 "링크가 있는 모든 사용자"인지, 네트워크 연결을 확인해 주세요.') + '</div>';
+  }
+  $('updatedAt').textContent = '데이터 기준: ' + new Date().toLocaleString('ko-KR');
+  setTimeout(() => { $('overlay').style.display = 'none'; }, 300);
+  syncFilterUI();
+  renderAll();
+  searchInit = false;
+  runSearch();
+  initInflowControls();
+  renderCompare();
+}
+
+/* ---------- 이벤트 ---------- */
+// 페이지 전환
+document.querySelectorAll('.ptab').forEach(btn => btn.addEventListener('click', () => {
+  document.querySelectorAll('.ptab').forEach(b => b.classList.toggle('on', b === btn));
+  document.querySelectorAll('.page').forEach(p => { p.hidden = (p.id !== 'page-' + btn.dataset.page); });
+  // 기간 필터는 메인·인입 분석에만 적용되므로 다른 페이지에서는 숨김
+  $('filterbar').style.display = (btn.dataset.page === 'main' || btn.dataset.page === 'inflow') ? 'flex' : 'none';
+  window.scrollTo(0, 0);
+}));
+// 인입량 추이 단위(월/주/일) + SO 필터 + 조건 비교
+document.querySelectorAll('.granBtn').forEach(btn => btn.addEventListener('click', () => {
+  inflowGran = btn.dataset.g;
+  document.querySelectorAll('.granBtn').forEach(b => b.classList.toggle('on', b === btn));
+  renderInflowTrend();
+}));
+$('inflowSo').addEventListener('change', () => { inflowSo = $('inflowSo').value; renderAll(); });
+$('cApply').addEventListener('click', renderCompare);
+// 점검자 조회 월 (선택 인원·상세 점검자는 유지)
+$('agentYm').addEventListener('change', () => { agentYm = $('agentYm').value; renderAgents(); });
+// 상세 분석: 점검자 선택 + 단위(월/주/일) + 기간 필터
+$('agentSelBox').addEventListener('change', () => { agentSel = $('agentSelBox').value; renderAgents(); });
+document.querySelectorAll('.dgranBtn').forEach(btn => btn.addEventListener('click', () => {
+  detailGran = btn.dataset.g;
+  document.querySelectorAll('.dgranBtn').forEach(b => b.classList.toggle('on', b === btn));
+  renderAgentDetail();
+}));
+$('dApply').addEventListener('click', () => {
+  const f = $('dFrom').value, t = $('dTo').value;
+  if (!f || !t || f > t) { alert('시작일과 종료일을 올바르게 선택해 주세요.'); return; }
+  detailRange.from = f; detailRange.to = t;
+  renderAgentDetail();
+});
+$('dReset').addEventListener('click', () => {
+  detailRange.from = null; detailRange.to = null;
+  $('dFrom').value = ''; $('dTo').value = '';
+  renderAgentDetail();
+});
+// 로우데이터 검색
+(() => {
+  let sTimer = null;
+  const deb = () => { clearTimeout(sTimer); sTimer = setTimeout(runSearch, 250); };
+  ['sAgent', 'sCust', 'sCustNo', 'sRpt', 'sAll'].forEach(id => $(id).addEventListener('input', deb));
+  ['sFrom', 'sTo', 'sResult', 'sMso', 'sSo'].forEach(id => $(id).addEventListener('change', runSearch));
+  $('sReset').addEventListener('click', () => {
+    ['sFrom', 'sTo', 'sAgent', 'sCust', 'sCustNo', 'sRpt', 'sAll'].forEach(id => $(id).value = '');
+    ['sResult', 'sMso', 'sSo'].forEach(id => $(id).value = '');
+    runSearch();
+  });
+})();
+
+document.querySelectorAll('.chip[data-preset]').forEach(ch => ch.addEventListener('click', () => applyPreset(ch.dataset.preset)));
+$('btnApply').addEventListener('click', () => {
+  const f = $('dtFrom').value, t = $('dtTo').value;
+  if (!f || !t || f > t) { alert('시작일과 종료일을 올바르게 선택해 주세요.'); return; }
+  state.from = f; state.to = t; state.preset = 'custom';
+  syncFilterUI(); renderAll();
+});
+$('btnRefresh').addEventListener('click', loadAll);
+
+/* ---------- 시작 ---------- */
+applyPreset('30');   // 기본 기간 설정 (renderAll은 데이터 없을 때 빈 화면)
+renderExports();
+loadAll();
+</script>
+</body>
+</html>
