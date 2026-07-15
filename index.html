@@ -101,6 +101,8 @@ table.list th{color:var(--muted); font-weight:600; text-align:left; padding:6px 
 table.list td{padding:6px 10px 6px 0; border-bottom:1px solid var(--grid); vertical-align:top;}
 table.list td.num{font-variant-numeric:tabular-nums;}
 .scorechip{display:inline-block; min-width:26px; text-align:center; border-radius:6px; padding:1px 6px; font-weight:700; font-size:12px; color:#fff; background:var(--bad);}
+mark.hl{background:#ffe27a; color:#0b0b0b; border-radius:3px; padding:0 1px; font-weight:600;}
+@media (prefers-color-scheme: dark){ mark.hl{background:#8a6d00; color:#fff;} }
 
 .exports{display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:12px;}
 .exp{background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:16px; display:flex; flex-direction:column; gap:8px;}
@@ -411,10 +413,8 @@ table.list td.num{font-variant-numeric:tabular-nums;}
         <label class="sfld">SO<br><select id="sSo" class="selbox" style="max-width:170px;"><option value="">전체</option></select></label>
       </div>
       <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
-        <label class="sfld">고객명<br><input type="text" id="sCust" class="selbox" placeholder="고객명" style="width:110px;"></label>
-        <label class="sfld">가입번호<br><input type="text" id="sCustNo" class="selbox" placeholder="가입번호" style="width:130px;"></label>
         <label class="sfld">레포트번호<br><input type="text" id="sRpt" class="selbox" placeholder="레포트번호" style="width:170px;"></label>
-        <label class="sfld">통합 검색<br><input type="text" id="sAll" class="selbox" placeholder="요청내용·리뷰 포함 모든 항목" style="width:190px;"></label>
+        <label class="sfld">통합 검색<br><input type="text" id="sAll" class="selbox" placeholder="요청내용·리뷰 포함 모든 항목" style="width:260px;"></label>
         <button class="chip" id="sReset">초기화</button>
       </div>
     </div>
@@ -516,6 +516,18 @@ function dateToDs(d) { return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '
 function addDays(d, n) { const x = new Date(d); x.setDate(x.getDate() + n); return x; }
 function monthLabel(ym) { return ym.slice(2, 4) + '.' + ym.slice(5, 7); }
 function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+/* 통합 검색어(q, 소문자)와 일치하는 부분을 배경색으로 강조 — q가 없으면 esc()와 동일 */
+function escHl(s, q) {
+  s = s == null ? '' : String(s);
+  if (!q) return esc(s);
+  const ls = s.toLowerCase();
+  let out = '', i = 0, p;
+  while ((p = ls.indexOf(q, i)) !== -1) {
+    out += esc(s.slice(i, p)) + '<mark class="hl">' + esc(s.slice(p, p + q.length)) + '</mark>';
+    i = p + q.length;
+  }
+  return out + esc(s.slice(i));
+}
 
 /* ---------- Sheets API 로더 ---------- */
 async function sheetsApi(path) {
@@ -1373,12 +1385,12 @@ function renderAgentDetail() {
   $('dLowInfo').textContent = '— ' + info;
   $('dLowReviews').innerHTML = !lowR.length
     ? '<div class="empty">해당 기간에 3점 미만 리뷰가 없습니다 🎉</div>'
-    : '<div style="overflow-x:auto;"><table class="list"><tr><th style="width:90px;">날짜</th><th style="width:110px;">SO</th><th style="width:110px;">처리결과</th><th style="width:50px;">점수</th><th>리뷰 내용</th><th style="width:90px;">고객명</th></tr>' +
+    : '<div style="overflow-x:auto;"><table class="list"><tr><th style="width:90px;">날짜</th><th style="width:110px;">SO</th><th style="width:110px;">처리결과</th><th style="width:50px;">점수</th><th>리뷰 내용</th></tr>' +
       lowR.map(r => {
         const sj = DATA.sjMap.get(r.rpt) || {};
         const txt = sj.rtext && sj.rtext !== '리뷰없음' ? sj.rtext : '(내용 없음)';
         return '<tr><td class="num">' + r.date + '</td><td>' + esc(r.soG) + '</td><td>' + esc(r.result) + '</td>' +
-          '<td><span class="scorechip">' + r.score + '</span></td><td>' + esc(txt) + '</td><td>' + esc(r.cust || '-') + '</td></tr>';
+          '<td><span class="scorechip">' + r.score + '</span></td><td>' + esc(txt) + '</td></tr>';
       }).join('') + '</table></div>';
   // 점검유형 누락 건 (선택 점검자 · 선택 기간 · AG='입력누락')
   const missR = DATA.seed.filter(r => r.agent === agentSel && keySet.has(keyFn(r.date)) && r.ag === '입력누락')
@@ -1386,13 +1398,19 @@ function renderAgentDetail() {
   $('dMissInfo').textContent = '— ' + info + ' · ' + fmt(missR.length) + '건';
   $('dMissList').innerHTML = !missR.length
     ? '<div class="empty">해당 기간에 점검유형 누락 건이 없습니다 🎉</div>'
-    : '<div style="overflow-x:auto;"><table class="list"><tr><th style="width:90px;">날짜</th><th style="width:110px;">SO</th><th style="width:110px;">처리결과</th><th>레포트번호</th><th style="width:90px;">고객명</th></tr>' +
+    : '<div style="overflow-x:auto;"><table class="list"><tr><th style="width:90px;">날짜</th><th style="width:110px;">SO</th><th style="width:110px;">처리결과</th><th>레포트번호</th></tr>' +
       missR.map(r => '<tr><td class="num">' + r.date + '</td><td>' + esc(r.soG) + '</td><td>' + esc(r.result) + '</td>' +
-        '<td class="num" style="font-size:11.5px;">' + esc(r.rpt || '-') + '</td><td>' + esc(r.cust || '-') + '</td></tr>').join('') + '</table></div>';
+        '<td class="num" style="font-size:11.5px;">' + esc(r.rpt || '-') + '</td></tr>').join('') + '</table></div>';
 }
 
 /* ---------- 로우데이터 검색 (seed + seed(정산용) 병합) ---------- */
-let searchInit = false, searchRows = [];
+let searchInit = false, searchRows = [], searchQ = '';
+/* 검색 탭 기본 기간: 최근 7일 (사용자가 기간을 바꾸기 전까지) */
+function setSearchDefaultRange() {
+  const today = new Date();
+  $('sTo').value = dateToDs(today);
+  $('sFrom').value = dateToDs(addDays(today, -6));
+}
 function initSearchFilters() {
   const opts = (id, vals) => { $(id).innerHTML = '<option value="">전체</option>' + vals.map(v => '<option>' + esc(v) + '</option>').join(''); };
   opts('sResult', [...new Set(DATA.seed.map(r => r.result))].sort());
@@ -1407,8 +1425,9 @@ function runSearch() {
   const f = {
     from: val('sFrom'), to: val('sTo'),
     agent: val('sAgent').toLowerCase(), result: $('sResult').value, mso: $('sMso').value, so: $('sSo').value,
-    cust: val('sCust').toLowerCase(), custNo: val('sCustNo').toLowerCase(), rpt: val('sRpt').toLowerCase(), all: val('sAll').toLowerCase(),
+    rpt: val('sRpt').toLowerCase(), all: val('sAll').toLowerCase(),
   };
+  searchQ = f.all;
   const inc = (v, q) => (v || '').toLowerCase().includes(q);
   const rows = DATA.seed.filter(r => {
     if (f.from && r.date < f.from) return false;
@@ -1417,10 +1436,9 @@ function runSearch() {
     if (f.result && r.result !== f.result) return false;
     if (f.mso && r.mso !== f.mso) return false;
     if (f.so && r.soG !== f.so) return false;
-    if (f.cust && !inc(r.cust, f.cust)) return false;
-    if (f.custNo && !inc(r.custNo, f.custNo)) return false;
     if (f.rpt && !inc(r.rpt, f.rpt)) return false;
     if (f.all) {
+      // 고객명·가입번호는 화면에 표시하지 않지만 통합 검색 대상에는 포함한다
       const sj = DATA.sjMap.get(r.rpt);
       const hay = [r.date, r.agent, r.result, r.mso, r.so, r.soG, r.cust, r.custNo, r.rpt,
         sj && sj.counselor, sj && sj.center, sj && sj.team, sj && sj.product, sj && sj.req, sj && sj.resultJ, sj && sj.rtext].filter(Boolean).join(' ').toLowerCase();
@@ -1431,16 +1449,26 @@ function runSearch() {
   searchRows = rows.slice(0, 300);
   $('sCount').textContent = '— ' + fmt(rows.length) + '건' + (rows.length > 300 ? ' (최신 300건 표시)' : '');
   if (!searchRows.length) { $('sResults').innerHTML = '<div class="empty">조건에 맞는 데이터가 없습니다</div>'; return; }
-  const clip = (s, n) => { s = s || ''; return s.length > n ? esc(s.slice(0, n)) + '…' : esc(s); };
+  // 검색어가 잘려나간 뒤쪽에 있으면 그 부분이 보이도록 표시 구간을 옮긴다
+  const clip = (s, n) => {
+    s = s || '';
+    if (!s) return '';
+    let start = 0;
+    if (searchQ) { const p = s.toLowerCase().indexOf(searchQ); if (p >= n) start = p - Math.floor(n / 3); }
+    const head = start > 0 ? '…' : '';
+    const tail = start + n < s.length ? '…' : '';
+    return head + escHl(s.slice(start, start + n), searchQ) + tail;
+  };
+  const hl = s => escHl(s || '', searchQ);
   $('sResults').innerHTML =
-    '<table class="list" style="min-width:1400px;"><tr><th>접수일</th><th>시간</th><th>점검자</th><th>처리결과</th><th>MSO</th><th>SO</th>' +
-    '<th>고객명</th><th>가입번호</th><th>레포트번호</th><th>리뷰점수</th><th>상담사</th><th>요청내용(정산용)</th><th>처리결과(정산용)</th></tr>' +
+    '<table class="list" style="min-width:1200px;"><tr><th>접수일</th><th>시간</th><th>점검자</th><th>처리결과</th><th>MSO</th><th>SO</th>' +
+    '<th>레포트번호</th><th>리뷰점수</th><th>상담사</th><th>요청내용(정산용)</th><th>처리결과(정산용)</th></tr>' +
     searchRows.map((r, i) => {
       const sj = DATA.sjMap.get(r.rpt) || {};
-      return '<tr class="srow" data-i="' + i + '"><td class="num">' + r.date + '</td><td class="num">' + esc(r.time || '') + '</td>' +
-        '<td>' + esc(r.agent) + '</td><td>' + esc(r.result) + '</td><td>' + esc(r.mso) + '</td><td>' + esc(r.soG) + '</td>' +
-        '<td>' + esc(r.cust) + '</td><td class="num">' + esc(r.custNo) + '</td><td class="num" style="font-size:11.5px;">' + esc(r.rpt) + '</td>' +
-        '<td class="num">' + (r.score != null ? r.score : '-') + '</td><td>' + esc(sj.counselor || '-') + '</td>' +
+      return '<tr class="srow" data-i="' + i + '"><td class="num">' + hl(r.date) + '</td><td class="num">' + hl(r.time) + '</td>' +
+        '<td>' + hl(r.agent) + '</td><td>' + hl(r.result) + '</td><td>' + hl(r.mso) + '</td><td>' + hl(r.soG) + '</td>' +
+        '<td class="num" style="font-size:11.5px;">' + hl(r.rpt) + '</td>' +
+        '<td class="num">' + (r.score != null ? r.score : '-') + '</td><td>' + (sj.counselor ? hl(sj.counselor) : '-') + '</td>' +
         '<td title="' + esc(sj.req || '') + '">' + (clip(sj.req, 28) || '-') + '</td>' +
         '<td title="' + esc(sj.resultJ || '') + '">' + (clip(sj.resultJ, 22) || '-') + '</td></tr>';
     }).join('') + '</table>';
@@ -1465,11 +1493,11 @@ function searchDetailHtml(i) {
   const r = searchRows[i];
   if (!r) return '';
   const sj = DATA.sjMap.get(r.rpt) || {};
-  const fld = (k, v) => '<tr><th style="width:110px;white-space:nowrap;">' + k + '</th><td>' + (v ? esc(v) : '-') + '</td></tr>';
-  return '<div style="padding:14px 16px;border-top:2px solid var(--accent);"><h3 style="font-size:13.5px;margin-bottom:8px;">📄 상세 — ' + esc(r.rpt || '(레포트번호 없음)') + '</h3>' +
+  const fld = (k, v) => '<tr><th style="width:110px;white-space:nowrap;">' + k + '</th><td>' + (v ? escHl(v, searchQ) : '-') + '</td></tr>';
+  return '<div style="padding:14px 16px;border-top:2px solid var(--accent);"><h3 style="font-size:13.5px;margin-bottom:8px;">📄 상세 — ' + escHl(r.rpt || '(레포트번호 없음)', searchQ) + '</h3>' +
     '<div class="grid c2"><div><table class="list">' +
     fld('접수일시', r.date + ' ' + (r.time || '')) + fld('점검자명', r.agent) + fld('처리결과', r.result) +
-    fld('MSO / SO', r.mso + ' / ' + r.so) + fld('고객명', r.cust) + fld('가입번호', r.custNo) +
+    fld('MSO / SO', r.mso + ' / ' + r.so) +
     fld('리뷰점수', r.score != null ? r.score + '점' : (sj.score != null ? sj.score + '점' : '리뷰없음')) +
     '</table></div><div><table class="list">' +
     fld('상담사', sj.counselor) + fld('센터명', sj.center) + fld('소속팀', sj.team) + fld('사용상품', sj.product) +
@@ -1477,7 +1505,7 @@ function searchDetailHtml(i) {
     fld('리뷰내용', sj.rtext && sj.rtext !== '리뷰없음' ? sj.rtext : '-') +
     '</table></div></div>' +
     '<div style="margin-top:10px;"><div style="font-size:12px;color:var(--muted);margin-bottom:4px;">요청내용 (seed(정산용))</div>' +
-    '<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-size:13px;white-space:pre-wrap;">' + (sj.req ? esc(sj.req) : '- 정산용 데이터에 없는 건입니다 -') + '</div></div></div>';
+    '<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-size:13px;white-space:pre-wrap;">' + (sj.req ? escHl(sj.req, searchQ) : '- 정산용 데이터에 없는 건입니다 -') + '</div></div></div>';
 }
 
 /* ---------- 조건 비교 (A vs B) ---------- */
@@ -2114,6 +2142,7 @@ async function loadAll() {
   syncFilterUI();
   renderAll();
   searchInit = false;
+  if (!$('sFrom').value && !$('sTo').value) setSearchDefaultRange(); // 기간 미설정 시 최근 7일
   runSearch();
   initInflowControls();
   renderCompare();
@@ -2170,11 +2199,12 @@ $('dReset').addEventListener('click', () => {
 (() => {
   let sTimer = null;
   const deb = () => { clearTimeout(sTimer); sTimer = setTimeout(runSearch, 250); };
-  ['sAgent', 'sCust', 'sCustNo', 'sRpt', 'sAll'].forEach(id => $(id).addEventListener('input', deb));
+  ['sAgent', 'sRpt', 'sAll'].forEach(id => $(id).addEventListener('input', deb));
   ['sFrom', 'sTo', 'sResult', 'sMso', 'sSo'].forEach(id => $(id).addEventListener('change', runSearch));
   $('sReset').addEventListener('click', () => {
-    ['sFrom', 'sTo', 'sAgent', 'sCust', 'sCustNo', 'sRpt', 'sAll'].forEach(id => $(id).value = '');
+    ['sAgent', 'sRpt', 'sAll'].forEach(id => $(id).value = '');
     ['sResult', 'sMso', 'sSo'].forEach(id => $(id).value = '');
+    setSearchDefaultRange(); // 초기화 시에도 기본 기간(최근 7일)으로 되돌린다
     runSearch();
   });
 })();
