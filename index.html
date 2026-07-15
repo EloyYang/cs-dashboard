@@ -156,8 +156,8 @@ mark.hl{background:#ffe27a; color:#0b0b0b; border-radius:3px; padding:0 1px; fon
 
 <div class="filterbar" id="filterbar">
   <span style="font-size:12.5px;color:var(--muted);">기간</span>
-  <button class="chip" data-preset="month">이번 달</button>
-  <button class="chip on" data-preset="30">최근 30일</button>
+  <button class="chip on" data-preset="month">이번 달</button>
+  <button class="chip" data-preset="30">최근 30일</button>
   <button class="chip" data-preset="90">최근 90일</button>
   <button class="chip" data-preset="year">올해</button>
   <button class="chip" data-preset="all">전체</button>
@@ -693,7 +693,7 @@ function normalize(key, rows) {
 }
 
 /* ---------- 기간 필터 ---------- */
-const state = { from: null, to: null, preset: '30' };
+const state = { from: null, to: null, preset: 'month' };
 
 function applyPreset(p) {
   const today = new Date();
@@ -1132,7 +1132,11 @@ function renderAgentsPage() {
   const sel = $('agentYm');
   if (!months.length) { sel.innerHTML = ''; $('agentTable').innerHTML = '<div class="empty">데이터가 없습니다</div>'; $('agentDetailCard').style.display = 'none'; return; }
   sel.innerHTML = months.map(m => '<option value="' + m + '">' + m.replace('-', '년 ') + '월</option>').join('');
-  if (!agentYm || !months.includes(agentYm)) agentYm = months[0];
+  // 기본값은 이번 달 — 이번 달 데이터가 아직 없으면 가장 최근 월로 넘어간다
+  if (!agentYm || !months.includes(agentYm)) {
+    const thisYm = dateToDs(new Date()).slice(0, 7);
+    agentYm = months.includes(thisYm) ? thisYm : months[0];
+  }
   sel.value = agentYm;
   // 기간 지정 기본값: 데이터 전체 범위
   const allDates = DATA.seed.map(r => r.date).filter(Boolean).sort();
@@ -1532,10 +1536,10 @@ function searchDetailHtml(i) {
 
 /* ---------- 타스트 추출 (완료일자 기준 · SO=LGU+ · 처리결과=A/S 접수) ---------- */
 let tastRows = [];
-function setTastDefaultRange() {
+function setTastDefaultRange() { // 오늘 포함 최근 4일
   const today = new Date();
   $('tTo').value = dateToDs(today);
-  $('tFrom').value = dateToDs(addDays(today, -6));
+  $('tFrom').value = dateToDs(addDays(today, -3));
 }
 // 비교용 정규화 — 공백 유무('A/S 접수' vs 'A/S접수')로 어긋나지 않게 한다
 const tastNorm = s => String(s == null ? '' : s).replace(/\s+/g, '').toUpperCase();
@@ -2348,7 +2352,7 @@ function loginError(msg) {
 function startApp() {
   if (appStarted) return;
   appStarted = true;
-  applyPreset('30');
+  applyPreset('month');
   renderExports();
   loadAll();
 }
