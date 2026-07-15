@@ -434,6 +434,28 @@ mark.hl{background:#ffe27a; color:#0b0b0b; border-radius:3px; padding:0 1px; fon
     <div class="exports" id="exports"></div>
     <div class="rawlinks" id="rawlinks"></div>
   </section>
+
+  <section id="sec-tast" style="margin-top:26px;">
+    <h2>타스트 추출</h2>
+    <div class="sub">완료일자 기준 · SO = LGU+ · 처리결과 = A/S 접수 · 가입번호/고객명/완료일자/완료시간 순으로 복사됩니다</div>
+    <div class="card" style="margin-bottom:12px;">
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
+        <label class="sfld">완료일자 기간<br><input type="date" id="tFrom" class="selbox"> ~ <input type="date" id="tTo" class="selbox"></label>
+        <button class="chip" id="tRun">추출</button>
+        <button class="btn primary" id="tCopy">📋 엑셀용 복사</button>
+        <span id="tCount" style="font-size:12.5px;color:var(--muted);"></span>
+      </div>
+      <div style="margin-top:12px;">
+        <div class="sfld" style="display:block;margin-bottom:4px;">이미 붙여넣은 데이터 (중복 제외용) — 가입번호·고객명·완료일자·완료시간을 그대로 붙여넣으면 그 건들은 결과에서 빠집니다</div>
+        <textarea id="tExclude" class="selbox" rows="4" style="width:100%;resize:vertical;font-size:12px;" placeholder="500141435022&#9;임건&#9;2026-07-14&#9;오후 6:04:48&#10;500061288038&#9;배동영&#9;2026-07-14&#9;오후 7:07:48"></textarea>
+      </div>
+    </div>
+    <div class="card">
+      <h3>추출 결과 <span id="tInfo" style="font-weight:400;color:var(--muted);font-size:12.5px;"></span></h3>
+      <div class="desc">복사 버튼을 누르면 헤더 없이 데이터 행만 탭 구분(TSV)으로 클립보드에 담깁니다 · 엑셀에 바로 붙여넣기 하세요</div>
+      <div id="tResults" style="overflow-x:auto;"></div>
+    </div>
+  </section>
 </div>
 </main>
 
@@ -607,7 +629,7 @@ function normalize(key, rows) {
         score: parseNum(S(r, 9)), u: S(r, 20), v: S(r, 21), p: S(r, 15), af: S(r, 31), ag: S(r, 32), al: S(r, 37), am: S(r, 38), an: S(r, 39),
         // 검색용: C=레포트번호, F=접수시간, M=고객명, N=가입번호 / 처리시각: H=완료일자, I=완료시간
         rpt: S(r, 2), time: S(r, 5), cust: S(r, 12), custNo: S(r, 13),
-        cdate: parseDateStr(S(r, 7)), chour: parseHour(S(r, 8)),
+        cdate: parseDateStr(S(r, 7)), chour: parseHour(S(r, 8)), ctime: S(r, 8),
       });
     }
   } else if (key === 'review') {
@@ -1508,6 +1530,93 @@ function searchDetailHtml(i) {
     '<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-size:13px;white-space:pre-wrap;">' + (sj.req ? escHl(sj.req, searchQ) : '- 정산용 데이터에 없는 건입니다 -') + '</div></div></div>';
 }
 
+/* ---------- 타스트 추출 (완료일자 기준 · SO=LGU+ · 처리결과=A/S 접수) ---------- */
+let tastRows = [];
+function setTastDefaultRange() {
+  const today = new Date();
+  $('tTo').value = dateToDs(today);
+  $('tFrom').value = dateToDs(addDays(today, -6));
+}
+// 비교용 정규화 — 공백 유무('A/S 접수' vs 'A/S접수')로 어긋나지 않게 한다
+const tastNorm = s => String(s == null ? '' : s).replace(/\s+/g, '').toUpperCase();
+// '오후 6:04:48' · '18:04:48' → '18:04:48' — 엑셀이 시간 서식을 바꿔 붙여넣어도 같은 건으로 인식
+function tastTimeKey(s) {
+  s = String(s == null ? '' : s).trim();
+  const m = /(오전|오후|AM|PM)?\s*(\d{1,2}):(\d{2})(?::(\d{2}))?/i.exec(s);
+  if (!m) return tastNorm(s);
+  let h = +m[2];
+  const ap = (m[1] || '').toUpperCase();
+  if (ap === '오후' || ap === 'PM') { if (h < 12) h += 12; }
+  else if (ap === '오전' || ap === 'AM') { if (h === 12) h = 0; }
+  return pad2(h) + ':' + m[3] + ':' + (m[4] || '00');
+}
+// 한 건을 식별하는 키: 가입번호 + 완료일시 (고객명은 표기 차이가 있을 수 있어 제외)
+const tastKey = (custNo, date, time) =>
+  tastNorm(custNo) + '|' + (parseDateStr(date) || tastNorm(date)) + '|' + tastTimeKey(time);
+// 붙여넣은 기존 데이터 → 제외 키 집합 (가입번호…완료일자 완료시간 순, 고객명 유무 무관)
+function parseTastExclude(text) {
+  const set = new Set();
+  for (const line of String(text || '').split(/\r?\n/)) {
+    if (!line.trim()) continue;
+    const c = line.split(/\t| {2,}/).map(s => s.trim()).filter(Boolean);
+    if (c.length < 3) continue;
+    set.add(tastKey(c[0], c[c.length - 2], c[c.length - 1]));
+  }
+  return set;
+}
+function runTast() {
+  if (!DATA.seed.length) return;
+  const from = $('tFrom').value, to = $('tTo').value;
+  const excl = parseTastExclude($('tExclude').value);
+  const seen = new Set();
+  let nDup = 0, nExcl = 0, nMatch = 0;
+  tastRows = [];
+  for (const r of DATA.seed) {
+    if (!r.cdate) continue;                              // 완료일자 없는 건 제외
+    if (from && r.cdate < from) continue;
+    if (to && r.cdate > to) continue;
+    if (tastNorm(r.so) !== 'LGU+') continue;
+    if (tastNorm(r.result) !== 'A/S접수') continue;
+    nMatch++;
+    const k = tastKey(r.custNo, r.cdate, r.ctime);
+    if (seen.has(k)) { nDup++; continue; }               // 결과 내 중복
+    seen.add(k);
+    if (excl.has(k)) { nExcl++; continue; }              // 이미 붙여넣은 건
+    tastRows.push(r);
+  }
+  tastRows.sort((a, b) => a.cdate.localeCompare(b.cdate) || tastTimeKey(a.ctime).localeCompare(tastTimeKey(b.ctime)));
+  $('tCount').textContent = '복사 대상 ' + fmt(tastRows.length) + '건';
+  const parts = ['조건 일치 ' + fmt(nMatch) + '건'];
+  if (nDup) parts.push('중복 ' + fmt(nDup) + '건 제외');
+  if (nExcl) parts.push('붙여넣은 데이터와 겹쳐 ' + fmt(nExcl) + '건 제외');
+  $('tInfo').textContent = '— ' + parts.join(' · ');
+  if (!tastRows.length) {
+    $('tResults').innerHTML = '<div class="empty">' + (nMatch ? '조건에 맞는 건이 모두 제외되었습니다' : '해당 기간에 조건(SO=LGU+ · A/S 접수)에 맞는 데이터가 없습니다') + '</div>';
+    return;
+  }
+  $('tResults').innerHTML =
+    '<table class="list"><tr><th style="width:140px;">가입번호</th><th style="width:110px;">고객명</th><th style="width:110px;">완료일자</th><th>완료시간</th></tr>' +
+    tastRows.map(r => '<tr><td class="num">' + esc(r.custNo || '') + '</td><td>' + esc(r.cust || '') + '</td>' +
+      '<td class="num">' + esc(r.cdate) + '</td><td class="num">' + esc(r.ctime || '') + '</td></tr>').join('') +
+    '</table>';
+}
+function tastTsv() { return tastRows.map(r => [r.custNo || '', r.cust || '', r.cdate, r.ctime || ''].join('\t')).join('\n'); }
+async function copyTast() {
+  if (!tastRows.length) { alert('복사할 데이터가 없습니다. 기간을 선택하고 추출해 주세요.'); return; }
+  const tsv = tastTsv();
+  try {
+    await navigator.clipboard.writeText(tsv);
+  } catch (e) { // 클립보드 권한이 없을 때 대비
+    const ta = document.createElement('textarea');
+    ta.value = tsv; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy'); } catch (e2) { alert('복사에 실패했습니다: ' + e2.message); } finally { ta.remove(); }
+  }
+  const btn = $('tCopy'), old = btn.textContent;
+  btn.textContent = '✓ ' + fmt(tastRows.length) + '건 복사됨';
+  setTimeout(() => { btn.textContent = old; }, 1800);
+}
+
 /* ---------- 조건 비교 (A vs B) ---------- */
 function initInflowControls() {
   const sos = [...new Set(DATA.seed.map(r => r.soG))].sort();
@@ -2144,6 +2253,8 @@ async function loadAll() {
   searchInit = false;
   if (!$('sFrom').value && !$('sTo').value) setSearchDefaultRange(); // 기간 미설정 시 최근 7일
   runSearch();
+  if (!$('tFrom').value && !$('tTo').value) setTastDefaultRange();
+  runTast();
   initInflowControls();
   renderCompare();
 }
@@ -2207,6 +2318,15 @@ $('dReset').addEventListener('click', () => {
     setSearchDefaultRange(); // 초기화 시에도 기본 기간(최근 7일)으로 되돌린다
     runSearch();
   });
+})();
+
+// 타스트 추출
+(() => {
+  let tTimer = null;
+  $('tRun').addEventListener('click', runTast);
+  $('tCopy').addEventListener('click', copyTast);
+  ['tFrom', 'tTo'].forEach(id => $(id).addEventListener('change', runTast));
+  $('tExclude').addEventListener('input', () => { clearTimeout(tTimer); tTimer = setTimeout(runTast, 250); });
 })();
 
 document.querySelectorAll('.chip[data-preset]').forEach(ch => ch.addEventListener('click', () => applyPreset(ch.dataset.preset)));
