@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>고객센터 인입 대시보드</title>
+<script src="https://accounts.google.com/gsi/client"></script>
 <style>
 :root{
   --page:#f9f9f7; --surface:#fcfcfb; --ink:#0b0b0b; --ink2:#52514e; --muted:#898781;
@@ -129,19 +130,16 @@ table.list td.num{font-variant-numeric:tabular-nums;}
 <body>
 
 <div id="loginGate" style="position:fixed;inset:0;z-index:300;background:var(--page);display:flex;align-items:center;justify-content:center;padding:20px;">
-  <form id="loginForm" style="width:100%;max-width:340px;background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:26px 24px;box-shadow:0 8px 30px rgba(0,0,0,.12);">
-    <div style="font-size:20px;font-weight:700;margin-bottom:4px;">📞 고객센터 대시보드</div>
-    <div style="color:var(--muted);font-size:12.5px;margin-bottom:18px;">등록된 계정으로 로그인해 주세요</div>
-    <label style="font-size:12px;color:var(--ink2);">아이디</label>
-    <input type="text" id="loginId" autocomplete="username" style="width:100%;margin:4px 0 12px;padding:9px 11px;border:1px solid var(--border);border-radius:8px;background:var(--page);color:var(--ink);font-size:14px;font-family:inherit;box-sizing:border-box;">
-    <label style="font-size:12px;color:var(--ink2);">비밀번호</label>
-    <input type="password" id="loginPw" autocomplete="current-password" style="width:100%;margin:4px 0 12px;padding:9px 11px;border:1px solid var(--border);border-radius:8px;background:var(--page);color:var(--ink);font-size:14px;font-family:inherit;box-sizing:border-box;">
-    <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink2);margin-bottom:14px;cursor:pointer;">
-      <input type="checkbox" id="loginRemember"> 이 브라우저에서 로그인 유지
-    </label>
-    <button type="submit" class="btn primary" style="width:100%;justify-content:center;padding:10px;font-size:14px;">로그인</button>
-    <div id="loginErr" style="display:none;color:var(--bad);font-size:12.5px;margin-top:10px;text-align:center;"></div>
-  </form>
+  <div style="width:100%;max-width:360px;background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:30px 26px;box-shadow:0 8px 30px rgba(0,0,0,.12);text-align:center;">
+    <div style="font-size:21px;font-weight:700;margin-bottom:6px;">📞 고객센터 대시보드</div>
+    <div style="color:var(--muted);font-size:12.5px;margin-bottom:22px;line-height:1.6;">시트 접근 권한이 있는<br><b>구글 계정</b>으로 로그인해 주세요</div>
+    <button id="btnGoogleLogin" class="btn" style="width:100%;justify-content:center;padding:11px;font-size:14px;font-weight:600;gap:8px;">
+      <svg width="18" height="18" viewBox="0 0 48 48" style="display:block;"><path fill="#4285F4" d="M45.12 24.5c0-1.56-.14-3.06-.4-4.5H24v8.51h11.84c-.51 2.75-2.06 5.08-4.39 6.64v5.52h7.11c4.16-3.83 6.56-9.47 6.56-16.17z"/><path fill="#34A853" d="M24 46c5.94 0 10.92-1.97 14.56-5.33l-7.11-5.52c-1.97 1.32-4.49 2.1-7.45 2.1-5.73 0-10.58-3.87-12.31-9.07H4.34v5.7C7.96 41.07 15.4 46 24 46z"/><path fill="#FBBC05" d="M11.69 28.18C11.25 26.86 11 25.45 11 24s.25-2.86.69-4.18v-5.7H4.34C2.85 17.09 2 20.45 2 24s.85 6.91 2.34 9.88l7.35-5.7z"/><path fill="#EA4335" d="M24 10.75c3.23 0 6.13 1.11 8.41 3.29l6.31-6.31C34.91 4.18 29.93 2 24 2 15.4 2 7.96 6.93 4.34 14.12l7.35 5.7c1.73-5.2 6.58-9.07 12.31-9.07z"/></svg>
+      Google로 로그인
+    </button>
+    <div id="loginErr" style="display:none;color:var(--bad);font-size:12.5px;margin-top:14px;text-align:left;line-height:1.5;"></div>
+    <div style="color:var(--muted);font-size:11px;margin-top:16px;line-height:1.5;">구글시트가 공유된 계정만 데이터를 조회할 수 있습니다.</div>
+  </div>
 </div>
 
 <header class="top">
@@ -452,16 +450,27 @@ const SHEET_ID = '1SQtbpxZn4Nuc3nhWUIpeJpe-9Rm_hmbv8VU8wednstw';
 const SHEET_URL = 'https://docs.google.com/spreadsheets/d/' + SHEET_ID;
 document.getElementById('lnkSheet').href = SHEET_URL + '/edit';
 
-/* ---------- 탭 정의 ----------
-   시트에 기본 필터가 걸려 있어도 전체 행을 받도록 export CSV 엔드포인트 사용 (gviz는 필터로 숨겨진 행을 제외함) */
+/* ---------- 구글 인증(OAuth) ---------- */
+const GOOGLE_CLIENT_ID = '109878833660-mbona21aaa8erbq6j66bpjtd2bms0o1j.apps.googleusercontent.com';
+const OAUTH_SCOPE = 'https://www.googleapis.com/auth/spreadsheets.readonly https://www.googleapis.com/auth/userinfo.email';
+let accessToken = null;
+
+/* ---------- 탭 정의 (Sheets API로 로드 — 권한 있는 계정만 조회) ----------
+   range는 A1 표기(시트명!열범위). API values.get은 필터로 숨겨진 행도 전부 반환함. */
 const RAW_TABS = {
-  seed:     { gid: 2033774405, label: 'seed' },
-  review:   { gid: 1124004812, label: 'seed(정산용) 리뷰' },
-  jochi:    { gid: 271896498,  label: '조치사항' },
-  realtime: { gid: 1394642031, label: '실시간원격주치의' },
-  computer: { gid: 1349881106, label: '컴퓨터주치의' },
-  remote:   { gid: 1268243589, label: 'remote' },
-  status:   { gid: 1844693251, label: '현황(근태)' },
+  seed:     { title: 'seed',            range: "'seed'!A:AN",           label: 'seed' },
+  review:   { title: 'seed(정산용)',     range: "'seed(정산용)'!A:X",    label: 'seed(정산용) 리뷰' },
+  jochi:    { title: '조치사항',          range: "'조치사항'!A:N",         label: '조치사항' },
+  realtime: { title: '실시간원격주치의',   range: "'실시간원격주치의'!A:N",   label: '실시간원격주치의' },
+  computer: { title: '컴퓨터주치의',      range: "'컴퓨터주치의'!A:I",       label: '컴퓨터주치의' },
+  remote:   { title: 'remote',          range: "'remote'!A:Z",          label: 'remote' },
+  status:   { title: '현황',             range: "'현황'!A:AG",           label: '현황(근태)' },
+};
+/* gid → 시트 제목 (보고서 탭 등 제목 기반 API 조회용) */
+const TAB_TITLE = {
+  2033774405: 'seed', 1124004812: 'seed(정산용)', 271896498: '조치사항',
+  1394642031: '실시간원격주치의', 1349881106: '컴퓨터주치의', 1268243589: 'remote', 1844693251: '현황',
+  1179299741: '일보', 1888068093: '홈보고', 1990450613: '소호보고', 926644026: 'lg리뷰보고',
 };
 const REPORT_TABS = [
   { name: '일보',       gid: 1179299741, desc: '「기술 실적 관리」 파일 그대로(현황요약 서식·수식 유지) + 연간실적상세에 최신 값 반영' },
@@ -508,16 +517,35 @@ function addDays(d, n) { const x = new Date(d); x.setDate(x.getDate() + n); retu
 function monthLabel(ym) { return ym.slice(2, 4) + '.' + ym.slice(5, 7); }
 function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
 
-/* ---------- CSV 로더 ---------- */
-async function loadTab(key) {
-  const { gid } = RAW_TABS[key];
-  const ctl = new AbortController();
-  const timer = setTimeout(() => ctl.abort(), 120000);
-  try {
-    const res = await fetch(SHEET_URL + '/export?format=csv&gid=' + gid, { signal: ctl.signal });
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    return parseCSV(await res.text());
-  } finally { clearTimeout(timer); }
+/* ---------- Sheets API 로더 ---------- */
+async function sheetsApi(path) {
+  if (!accessToken) throw new Error('로그인이 필요합니다');
+  const res = await fetch('https://sheets.googleapis.com/v4/spreadsheets/' + SHEET_ID + path, {
+    headers: { Authorization: 'Bearer ' + accessToken },
+  });
+  if (res.status === 401) { accessToken = null; throw new Error('인증이 만료되었습니다. 다시 로그인해 주세요 (401)'); }
+  if (res.status === 403) throw new Error('이 구글 계정은 시트 접근 권한이 없습니다 (403)');
+  if (!res.ok) {
+    let msg = 'HTTP ' + res.status;
+    try { const j = await res.json(); if (j.error && j.error.message) msg += ' — ' + j.error.message; } catch (e) {}
+    throw new Error(msg);
+  }
+  return res.json();
+}
+/* 여러 범위를 한 번에 조회 → {key: rows[][]} */
+async function apiBatchGet(rangesByKey) {
+  const keys = Object.keys(rangesByKey);
+  const qs = keys.map(k => 'ranges=' + encodeURIComponent(rangesByKey[k])).join('&');
+  const data = await sheetsApi('/values:batchGet?' + qs + '&valueRenderOption=FORMATTED_VALUE&dateTimeRenderOption=FORMATTED_STRING');
+  const out = {};
+  (data.valueRanges || []).forEach((vr, i) => { out[keys[i]] = vr.values || []; });
+  return out;
+}
+/* 단일 시트(제목) 전체 조회 */
+async function apiGetValues(title) {
+  const range = "'" + String(title).replace(/'/g, "''") + "'";
+  const data = await sheetsApi('/values/' + encodeURIComponent(range) + '?valueRenderOption=FORMATTED_VALUE&dateTimeRenderOption=FORMATTED_STRING');
+  return data.values || [];
 }
 
 function parseCSV(text) {
@@ -552,7 +580,7 @@ function normalize(key, rows) {
   const H = rows[0].map(h => String(h || ''));
   const body = rows.slice(1);
   const out = [];
-  const S = (r, i) => (r[i] || '').trim();
+  const S = (r, i) => String(r[i] ?? '').trim();
   const bad = v => !v || v.startsWith('#');
 
   if (key === 'seed') {
@@ -600,9 +628,9 @@ function normalize(key, rows) {
     const att = new Map();
     for (let ri = 8; ri <= 21 && ri < rows.length; ri++) {
       const r = rows[ri] || [];
-      const name = (r[2] || '').trim();
+      const name = String(r[2] ?? '').trim();
       if (!name || name === '이름') continue;
-      att.set(name, parseNum((r[32] || '').trim()) || 0);
+      att.set(name, parseNum(String(r[32] ?? '').trim()) || 0);
     }
     DATA.attend = att;
   } else if (key === 'realtime') {
@@ -1787,10 +1815,8 @@ async function xlsxBlob(sheets) { // sheets: [{name, rows}]
   return makeZip(files);
 }
 async function fetchTabRows(gid) {
-  const res = await fetch(SHEET_URL + '/export?format=csv&gid=' + gid);
-  if (!res.ok) throw new Error('HTTP ' + res.status);
-  const rows = parseCSV(await res.text());
-  while (rows.length && rows[rows.length - 1].every(c => !c || !c.trim())) rows.pop();
+  const rows = await apiGetValues(TAB_TITLE[gid]);
+  while (rows.length && rows[rows.length - 1].every(c => !c || !String(c).trim())) rows.pop();
   return rows;
 }
 
@@ -1799,10 +1825,11 @@ async function fetchLgReviews() {
   const rows = await fetchTabRows(926644026);
   const H = rows[0].map(h => String(h || ''));
   const iD = colIdx(H, '접수일자', 0), iT = colIdx(H, '접수시간', 1), iS = colIdx(H, '리뷰점수', 2), iR = colIdx(H, '리뷰', 3), iSo = colIdx(H, 'so', 4);
+  const T = (r, i) => String(r[i] ?? '').trim();
   return rows.slice(1).map(r => ({
-    date: (r[iD] || '').trim(), time: (r[iT] || '').trim(),
-    score: parseNum((r[iS] || '').trim()),
-    review: (r[iR] || '').trim(), so: (r[iSo] || '').trim().toUpperCase()
+    date: T(r, iD), time: T(r, iT),
+    score: parseNum(T(r, iS)),
+    review: T(r, iR), so: T(r, iSo).toUpperCase()
   })).filter(r => r.date && r.score != null)
     .sort((a, b) => b.date.localeCompare(a.date) || b.time.localeCompare(a.time));
 }
@@ -2057,35 +2084,30 @@ function renderExports() {
 
 /* ---------- 로딩 ---------- */
 async function loadAll() {
+  if (!accessToken) { $('loginGate').style.display = 'flex'; return; }
   $('overlay').style.display = 'flex';
   $('errbar').style.display = 'none';
   const keys = Object.keys(RAW_TABS);
-  $('loadList').innerHTML = keys.map(k => '<li id="ld-' + k + '">' + RAW_TABS[k].label + ' <span class="st">대기</span></li>').join('');
-  const results = await Promise.allSettled(keys.map(async k => {
-    const li = $('ld-' + k);
-    li.querySelector('.st').textContent = '불러오는 중…';
-    try {
-      const rows = await loadTab(k);
-      normalize(k, rows);
+  $('loadList').innerHTML = keys.map(k => '<li id="ld-' + k + '">' + RAW_TABS[k].label + ' <span class="st">불러오는 중…</span></li>').join('');
+  try {
+    const ranges = {}; keys.forEach(k => { ranges[k] = RAW_TABS[k].range; });
+    const result = await apiBatchGet(ranges);
+    keys.forEach(k => {
+      normalize(k, result[k] || []);
+      const li = $('ld-' + k);
       li.className = 'done';
       li.querySelector('.st').textContent = '✓ ' + fmt(DATA[k].length) + '건';
-    } catch (e) {
-      li.className = 'fail';
-      li.querySelector('.st').textContent = '✗ 실패';
-      throw new Error(RAW_TABS[k].label + ': ' + e.message);
-    }
-  }));
-  const fails = results.filter(r => r.status === 'rejected');
-  if (fails.length) {
+    });
+  } catch (e) {
+    keys.forEach(k => { const li = $('ld-' + k); li.className = 'fail'; li.querySelector('.st').textContent = '✗'; });
     const bar = $('errbar');
     bar.style.display = 'block';
-    const isFile = location.protocol === 'file:';
-    bar.innerHTML = '⚠ 일부 데이터를 불러오지 못했습니다 — ' + fails.map(f => esc(f.reason.message)).join(' / ') +
-      ' &nbsp;<a href="#" onclick="loadAll();return false;">다시 시도</a>' +
-      '<div style="color:var(--muted);font-size:12px;margin-top:2px;">' +
-      (isFile
-        ? '이 파일을 직접 더블클릭해 열면(file://) 브라우저 보안 정책 때문에 구글시트 데이터를 가져올 수 없습니다. 같은 폴더의 <b>「대시보드 실행.bat」</b>을 더블클릭해서 열어 주세요.'
-        : '시트 공유 설정이 "링크가 있는 모든 사용자"인지, 네트워크 연결을 확인해 주세요.') + '</div>';
+    const need401 = /401|만료/.test(e.message);
+    bar.innerHTML = '⚠ 데이터를 불러오지 못했습니다 — ' + esc(e.message) +
+      ' &nbsp;<a href="#" onclick="' + (need401 ? 'requestToken();' : 'loadAll();') + 'return false;">' + (need401 ? '다시 로그인' : '다시 시도') + '</a>' +
+      '<div style="color:var(--muted);font-size:12px;margin-top:2px;">구글시트가 로그인한 계정에 공유되어 있는지, Sheets API가 사용 설정되었는지 확인해 주세요.</div>';
+    $('overlay').style.display = 'none';
+    return;
   }
   $('updatedAt').textContent = '데이터 기준: ' + new Date().toLocaleString('ko-KR');
   setTimeout(() => { $('overlay').style.display = 'none'; }, 300);
@@ -2166,69 +2188,70 @@ $('btnApply').addEventListener('click', () => {
 });
 $('btnRefresh').addEventListener('click', loadAll);
 
-/* ---------- 로그인(접근 제어) ----------
-   주의: GitHub Pages는 정적 호스팅이라 서버 검증이 없습니다. 이 로그인은 일반 사용자의
-   접근을 막는 '소프트 잠금'이며, 코드를 열어보는 기술적 사용자까지 막지는 못합니다.
-   계정 추가: ACCOUNTS 배열에 {user, role, hash} 추가 (hash = SHA-256("csdash-2026:" + 비밀번호)). */
-const AUTH_SALT = 'csdash-2026';
-const AUTH_KEY = 'csdash_auth';
-const ACCOUNTS = [
-  { user: 'arcdo', role: 'master', hash: '1f502dd9fcd8ab6300aeb30b843d9c3e41d091fef1f87a866e7995797033344b' },
-];
-async function sha256Hex(str) {
-  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
-  return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
+/* ---------- 구글 로그인(OAuth) + 접근 제어 ----------
+   구글시트를 특정 계정에만 공유해 두면, 그 계정으로 로그인한 사용자만 데이터를 조회할 수 있습니다.
+   (Client ID는 공개돼도 안전한 값이며, 실제 접근 통제는 구글시트 공유 설정이 담당합니다.) */
+let appStarted = false, tokenClient = null;
+function loginError(msg) {
+  const el = $('loginErr'); el.style.display = 'block'; el.innerHTML = msg;
 }
-let appStarted = false;
 function startApp() {
   if (appStarted) return;
   appStarted = true;
-  applyPreset('30');   // 기본 기간 설정
+  applyPreset('30');
   renderExports();
   loadAll();
 }
-function currentUser() {
-  try {
-    const raw = sessionStorage.getItem(AUTH_KEY) || localStorage.getItem(AUTH_KEY);
-    if (!raw) return null;
-    const o = JSON.parse(raw);
-    return ACCOUNTS.some(a => a.user === o.user && a.hash === o.hash) ? o : null;
-  } catch (e) { return null; }
-}
-function showApp(u) {
-  $('loginGate').style.display = 'none';
-  $('whoami').style.display = '';
-  $('whoami').textContent = '👤 ' + u.user + (u.role === 'master' ? ' (마스터)' : '');
-  $('btnLogout').style.display = '';
-  startApp();
-}
-$('loginForm').addEventListener('submit', async ev => {
-  ev.preventDefault();
-  const id = $('loginId').value.trim();
-  const pw = $('loginPw').value;
-  const hash = await sha256Hex(AUTH_SALT + ':' + pw);
-  const acc = ACCOUNTS.find(a => a.user === id && a.hash === hash);
-  if (!acc) {
-    $('loginErr').style.display = 'block';
-    $('loginErr').textContent = '아이디 또는 비밀번호가 올바르지 않습니다.';
-    $('loginPw').value = '';
+async function onToken(resp) {
+  if (resp.error || !resp.access_token) {
+    loginError('로그인에 실패했습니다: ' + esc(resp.error_description || resp.error || '알 수 없는 오류'));
     return;
   }
-  const rec = JSON.stringify({ user: acc.user, role: acc.role, hash: acc.hash });
-  ($('loginRemember').checked ? localStorage : sessionStorage).setItem(AUTH_KEY, rec);
-  showApp(acc);
-});
+  accessToken = resp.access_token;
+  $('loginErr').style.display = 'none';
+  // 로그인한 계정 이메일 표시
+  let email = '';
+  try {
+    const r = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', { headers: { Authorization: 'Bearer ' + accessToken } });
+    if (r.ok) email = (await r.json()).email || '';
+  } catch (e) {}
+  $('loginGate').style.display = 'none';
+  $('whoami').style.display = '';
+  $('whoami').textContent = '👤 ' + (email || '구글 계정');
+  $('btnLogout').style.display = '';
+  if (!appStarted) startApp(); else loadAll();
+}
+function requestToken() {
+  if (!tokenClient) { loginError('구글 로그인 모듈을 불러오지 못했습니다. 새로고침 후 다시 시도해 주세요.'); return; }
+  $('loginGate').style.display = 'flex';
+  tokenClient.requestAccessToken({ prompt: accessToken ? '' : 'consent' });
+}
+function initGoogleAuth() {
+  if (!(window.google && google.accounts && google.accounts.oauth2)) {
+    loginError('구글 로그인 모듈 로딩 실패 — 네트워크 또는 광고 차단 확장 프로그램을 확인해 주세요.');
+    return;
+  }
+  tokenClient = google.accounts.oauth2.initTokenClient({
+    client_id: GOOGLE_CLIENT_ID, scope: OAUTH_SCOPE, callback: onToken,
+  });
+}
+$('btnGoogleLogin').addEventListener('click', () => requestToken());
 $('btnLogout').addEventListener('click', () => {
-  sessionStorage.removeItem(AUTH_KEY);
-  localStorage.removeItem(AUTH_KEY);
+  if (accessToken && window.google && google.accounts && google.accounts.oauth2) {
+    try { google.accounts.oauth2.revoke(accessToken); } catch (e) {}
+  }
+  accessToken = null;
   location.reload();
 });
 
-/* ---------- 시작: 로그인 확인 후 앱 구동 ---------- */
+/* ---------- 시작: 구글 로그인 대기 ---------- */
 (() => {
-  const u = currentUser();
-  if (u) showApp(u);
-  else { $('loginGate').style.display = 'flex'; setTimeout(() => $('loginId').focus(), 100); }
+  $('loginGate').style.display = 'flex';
+  let tries = 0;
+  const wait = setInterval(() => {
+    if (window.google && google.accounts && google.accounts.oauth2) { clearInterval(wait); initGoogleAuth(); }
+    else if (++tries > 40) { clearInterval(wait); initGoogleAuth(); } // 20초 후 오류 표시
+  }, 500);
 })();
 </script>
 </body>
