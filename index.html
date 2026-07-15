@@ -104,6 +104,19 @@ table.list td.num{font-variant-numeric:tabular-nums;}
 mark.hl{background:#ffe27a; color:#0b0b0b; border-radius:3px; padding:0 1px; font-weight:600;}
 @media (prefers-color-scheme: dark){ mark.hl{background:#8a6d00; color:#fff;} }
 
+/* 다중 선택 드롭다운 */
+.ms{position:relative; display:inline-block; margin-top:3px;}
+.ms-btn{border:1px solid var(--border); background:var(--surface); color:var(--ink); border-radius:8px; padding:5px 24px 5px 10px; font-size:13px; font-family:inherit; cursor:pointer; text-align:left; width:100%; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+.ms-btn::after{content:'▾'; position:absolute; right:9px; top:50%; transform:translateY(-50%); color:var(--muted); font-size:11px; pointer-events:none;}
+.ms.open .ms-btn{border-color:var(--accent);}
+.ms-btn.has{font-weight:600;}
+.ms-pop{display:none; position:absolute; z-index:60; top:calc(100% + 4px); left:0; min-width:100%; max-height:260px; overflow-y:auto; background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:6px; box-shadow:0 10px 28px rgba(0,0,0,.16);}
+.ms.open .ms-pop{display:block;}
+.ms-opt{display:flex; align-items:center; gap:7px; padding:5px 8px; font-size:13px; white-space:nowrap; cursor:pointer; border-radius:6px; color:var(--ink);}
+.ms-opt:hover{background:var(--accent-soft);}
+.ms-opt input{margin:0; cursor:pointer;}
+.ms-clear{width:100%; border:0; border-top:1px solid var(--border); background:none; color:var(--accent); font-size:12px; font-family:inherit; padding:6px 0 2px; margin-top:4px; cursor:pointer;}
+
 .exports{display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:12px;}
 .exp{background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:16px; display:flex; flex-direction:column; gap:8px;}
 .exp .name{font-weight:700; font-size:14px;}
@@ -408,9 +421,9 @@ mark.hl{background:#ffe27a; color:#0b0b0b; border-radius:3px; padding:0 1px; fon
       <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:10px;">
         <label class="sfld">기간<br><input type="date" id="sFrom" class="selbox"> ~ <input type="date" id="sTo" class="selbox"></label>
         <label class="sfld">점검자명<br><input type="text" id="sAgent" class="selbox" placeholder="예: 안정" style="width:110px;"></label>
-        <label class="sfld">처리결과<br><select id="sResult" class="selbox"><option value="">전체</option></select></label>
-        <label class="sfld">MSO<br><select id="sMso" class="selbox"><option value="">전체</option></select></label>
-        <label class="sfld">SO<br><select id="sSo" class="selbox" style="max-width:170px;"><option value="">전체</option></select></label>
+        <div class="sfld">처리결과<br><div class="ms" id="sResult" style="min-width:130px;"></div></div>
+        <div class="sfld">MSO<br><div class="ms" id="sMso" style="min-width:110px;"></div></div>
+        <div class="sfld">SO<br><div class="ms" id="sSo" style="min-width:150px;max-width:190px;"></div></div>
       </div>
       <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
         <label class="sfld">레포트번호<br><input type="text" id="sRpt" class="selbox" placeholder="레포트번호" style="width:170px;"></label>
@@ -470,6 +483,10 @@ mark.hl{background:#ffe27a; color:#0b0b0b; border-radius:3px; padding:0 1px; fon
 'use strict';
 const SHEET_ID = '1SQtbpxZn4Nuc3nhWUIpeJpe-9Rm_hmbv8VU8wednstw';
 const SHEET_URL = 'https://docs.google.com/spreadsheets/d/' + SHEET_ID;
+/* 근태특이사항은 별도 스프레드시트에 있어 따로 조회한다 (기록 1건 = 근태 -1점) */
+const ATTEND_SHEET_ID = '1vTbo9dvdGezOPJgCZuSWiFgC51oK_tnzi4rH-0wa_h0';
+const ATTEND_TAB = { title: '근태특이사항', range: "'근태특이사항'!A:Z", label: '근태특이사항' };
+const ATTEND_URL = 'https://docs.google.com/spreadsheets/d/' + ATTEND_SHEET_ID;
 document.getElementById('lnkSheet').href = SHEET_URL + '/edit';
 
 /* ---------- 구글 인증(OAuth) ---------- */
@@ -486,7 +503,6 @@ const RAW_TABS = {
   realtime: { title: '실시간원격주치의',   range: "'실시간원격주치의'!A:N",   label: '실시간원격주치의' },
   computer: { title: '컴퓨터주치의',      range: "'컴퓨터주치의'!A:I",       label: '컴퓨터주치의' },
   remote:   { title: 'remote',          range: "'remote'!A:Z",          label: 'remote' },
-  status:   { title: '현황',             range: "'현황'!A:AG",           label: '현황(근태)' },
 };
 /* gid → 시트 제목 (보고서 탭 등 제목 기반 API 조회용) */
 const TAB_TITLE = {
@@ -552,9 +568,9 @@ function escHl(s, q) {
 }
 
 /* ---------- Sheets API 로더 ---------- */
-async function sheetsApi(path) {
+async function sheetsApi(path, sheetId = SHEET_ID) {
   if (!accessToken) throw new Error('로그인이 필요합니다');
-  const res = await fetch('https://sheets.googleapis.com/v4/spreadsheets/' + SHEET_ID + path, {
+  const res = await fetch('https://sheets.googleapis.com/v4/spreadsheets/' + sheetId + path, {
     headers: { Authorization: 'Bearer ' + accessToken },
   });
   if (res.status === 401) { accessToken = null; throw new Error('인증이 만료되었습니다. 다시 로그인해 주세요 (401)'); }
@@ -567,10 +583,10 @@ async function sheetsApi(path) {
   return res.json();
 }
 /* 여러 범위를 한 번에 조회 → {key: rows[][]} */
-async function apiBatchGet(rangesByKey) {
+async function apiBatchGet(rangesByKey, sheetId = SHEET_ID) {
   const keys = Object.keys(rangesByKey);
   const qs = keys.map(k => 'ranges=' + encodeURIComponent(rangesByKey[k])).join('&');
-  const data = await sheetsApi('/values:batchGet?' + qs + '&valueRenderOption=FORMATTED_VALUE&dateTimeRenderOption=FORMATTED_STRING');
+  const data = await sheetsApi('/values:batchGet?' + qs + '&valueRenderOption=FORMATTED_VALUE&dateTimeRenderOption=FORMATTED_STRING', sheetId);
   const out = {};
   (data.valueRanges || []).forEach((vr, i) => { out[keys[i]] = vr.values || []; });
   return out;
@@ -607,7 +623,27 @@ function colIdx(header, name, fallback) {
 }
 
 /* ---------- 데이터 저장소 ---------- */
-const DATA = { seed: [], review: [], jochi: [], realtime: [], computer: [], remote: [], status: [], sjMap: new Map(), attend: new Map() };
+const DATA = { seed: [], review: [], jochi: [], realtime: [], computer: [], remote: [], sjMap: new Map(), attend: [] };
+let attendLoaded = false;   // 근태특이사항 시트를 실제로 읽었는지 (못 읽으면 근태를 '-'로 표시)
+let attendCols = null;      // 자동 인식한 {name, date} 열 이름 — 화면에 표기해 확인할 수 있게 한다
+
+/* 헤더 후보 중 먼저 맞는 열 (정확히 일치 → 부분 일치 순). 없으면 -1 */
+function colIdxAny(header, names) {
+  for (const n of names) { const i = header.findIndex(h => h.trim() === n); if (i >= 0) return i; }
+  for (const n of names) { const i = header.findIndex(h => h.trim().includes(n)); if (i >= 0) return i; }
+  return -1;
+}
+/* 헤더로 못 찾을 때: 조건을 가장 많이 만족하는 열을 고른다 */
+function guessCol(body, pred) {
+  const width = body.reduce((m, r) => Math.max(m, r.length), 0);
+  let best = -1, bestHits = 0;
+  for (let c = 0; c < width; c++) {
+    let hits = 0;
+    for (const r of body) { const v = String(r[c] ?? '').trim(); if (v && pred(v)) hits++; }
+    if (hits > bestHits) { bestHits = hits; best = c; }
+  }
+  return bestHits > 0 ? best : -1;
+}
 
 function normalize(key, rows) {
   if (!rows.length) { DATA[key] = []; return; }
@@ -657,16 +693,22 @@ function normalize(key, rows) {
         sym2: bad(sym2) ? null : sym2, cause2: bad(cause2) ? null : cause2, act2: bad(act2) ? null : act2,
       });
     }
-  } else if (key === 'status') {
-    // 현황 탭: 이름=C열(idx2), 근태(지각)=AG열(idx32), 시트 9~22행 참조
-    const att = new Map();
-    for (let ri = 8; ri <= 21 && ri < rows.length; ri++) {
-      const r = rows[ri] || [];
-      const name = String(r[2] ?? '').trim();
-      if (!name || name === '이름') continue;
-      att.set(name, parseNum(String(r[32] ?? '').trim()) || 0);
+  } else if (key === 'attend') {
+    // 근태특이사항: 이름+날짜 기록 1건당 -1점. 열 위치는 헤더로 찾고, 못 찾으면 값으로 추정한다.
+    let iName = colIdxAny(H, ['이름', '성명', '점검자명', '점검자', '대상자']);
+    let iDate = colIdxAny(H, ['날짜', '일자', '근태일자', '발생일', '일시']);
+    if (iDate < 0) iDate = guessCol(body, v => !!parseDateStr(v));
+    if (iName < 0) {
+      const names = new Set(DATA.seed.map(r => r.agent).filter(Boolean));
+      iName = guessCol(body, v => names.has(v));
     }
-    DATA.attend = att;
+    if (iName < 0 || iDate < 0) { attendCols = null; DATA.attend = []; return; }
+    attendCols = { name: H[iName] || ('열 ' + (iName + 1)), date: H[iDate] || ('열 ' + (iDate + 1)) };
+    for (const r of body) {
+      const date = parseDateStr(S(r, iDate)), name = S(r, iName);
+      if (!date || !name) continue;
+      out.push({ name, date });
+    }
   } else if (key === 'realtime') {
     const iDate = colIdx(H, '처리일자', 7), iContent = colIdx(H, '처리내용', 1), iTeam = colIdx(H, '소속', 13), iAgent = colIdx(H, '처리자', 5);
     for (const r of body) {
@@ -1375,12 +1417,15 @@ function renderAgentDetail() {
     $('chDRadar').innerHTML = '<div class="empty">조회 구간에 점검 데이터가 없습니다</div>';
     $('dRadarTable').innerHTML = '';
   } else {
-    const attMine = DATA.attend.has(agentSel) ? DATA.attend.get(agentSel) : null;
-    const attAvg = avgOf(allStats.map(a => DATA.attend.has(a.name) ? DATA.attend.get(a.name) : null));
+    // 근태: 근태특이사항 기록 1건당 -1점 (이름+날짜가 조회 구간에 드는 건만)
+    const attCount = name => DATA.attend.reduce((n, a) =>
+      n + (a.name === name && a.date >= span.from && a.date <= span.to ? 1 : 0), 0);
+    const attMine = attendLoaded ? attCount(agentSel) : null;
+    const attAvg = attendLoaded ? avgOf(allStats.map(a => attCount(a.name))) : null;
     const RCAP = 170; // radarChart의 최대치와 동일 (만점)
     // 높을수록 좋은 지표: 평균 대비 비율
     const ratioUp = (m, a2) => m == null ? null : (a2 ? Math.min(m / a2 * 100, RCAP) : (m > 0 ? RCAP : 100));
-    // 낮을수록 좋은 지표(근태=지각): 지각 0이면 만점, 그 외는 평균/본인 (본인이 평균보다 적으면 100% 초과)
+    // 낮을수록 좋은 지표(근태=특이사항 건수): 0건이면 만점, 그 외는 평균/본인 (본인이 평균보다 적으면 100% 초과)
     const ratioDown = (m, a2) => {
       if (m == null) return null;
       if (m === 0) return RCAP;                 // 지각 없음 = 만점
@@ -1392,18 +1437,20 @@ function renderAgentDetail() {
       { label: '리뷰점수', mine: meRow.score, avg: avgOf(allStats.map(a => a.score)), f: fmt1, unit: '점', ratio: ratioUp(meRow.score, avgOf(allStats.map(a => a.score))) },
       { label: '선택동의율', mine: meRow.consent, avg: avgOf(allStats.map(a => a.consent)), f: fmt1, unit: '%', ratio: ratioUp(meRow.consent, avgOf(allStats.map(a => a.consent))) },
       { label: 'M2설치율', mine: meRow.m2, avg: avgOf(allStats.map(a => a.m2)), f: fmt1, unit: '%', ratio: ratioUp(meRow.m2, avgOf(allStats.map(a => a.m2))) },
-      { label: '근태', mine: attMine, avg: attAvg, f: fmt1, unit: '회', invert: true, ratio: ratioDown(attMine, attAvg) },
+      { label: '근태', mine: attMine, avg: attAvg, f: v => v === 0 ? '0' : '-' + (Number.isInteger(v) ? fmt(v) : fmt1(v)), unit: '점', invert: true, ratio: ratioDown(attMine, attAvg) },
     ];
     radarChart('chDRadar', axes, agentSel);
     $('dRadarTable').innerHTML = '<table class="list"><tr><th>지표</th><th style="text-align:right;">' + esc(agentSel) + '</th><th style="text-align:right;">전체 평균</th><th style="text-align:right;">평균 대비</th></tr>' +
       axes.map(a => {
         const cmp = a.invert && a.mine === 0 ? '만점' : (a.ratio != null ? '<b>' + Math.round(a.ratio) + '%</b>' : '-');
-        return '<tr><td>' + a.label + (a.invert ? ' <span style="color:var(--muted);font-size:11px;">(지각)</span>' : '') + '</td>' +
+        return '<tr><td>' + a.label + (a.invert ? ' <span style="color:var(--muted);font-size:11px;">(특이사항)</span>' : '') + '</td>' +
         '<td class="num" style="text-align:right;font-weight:600;">' + (a.mine != null ? a.f(a.mine) + a.unit : '-') + '</td>' +
         '<td class="num" style="text-align:right;">' + (a.avg != null ? a.f(a.avg) + a.unit : '-') + '</td>' +
         '<td class="num" style="text-align:right;">' + cmp + '</td></tr>';
       }).join('') +
-      '</table><div style="font-size:11.5px;color:var(--muted);margin-top:6px;">※ 근태는 현황 탭 AG열 지각 횟수 — <b>낮을수록 우수</b>하며 지각이 없으면 만점으로 표시됩니다. 레이더는 모든 지표를 「밖으로 갈수록 우수」하게 정규화(전체 평균=100%)했습니다. 기준 구간: ' + span.label + ' 전체 점검자.</div>';
+      '</table><div style="font-size:11.5px;color:var(--muted);margin-top:6px;">※ 근태는 <b>근태특이사항 시트 기록 1건당 -1점</b> (이름·날짜로 매칭, 조회 구간에 드는 기록만) — 특이사항이 없으면 만점으로 표시됩니다' +
+      (attendCols ? ' · 인식한 열: ' + esc(attendCols.name) + ' / ' + esc(attendCols.date) : '') +
+      '. 레이더는 모든 지표를 「밖으로 갈수록 우수」하게 정규화(전체 평균=100%)했습니다. 기준 구간: ' + span.label + ' 전체 점검자.</div>';
   }
   // 3점 미만 리뷰 (선택 점검자 · 선택 기간)
   const lowR = DATA.seed.filter(r => r.agent === agentSel && keySet.has(keyFn(r.date)) && r.score != null && r.score < 3)
@@ -1429,6 +1476,50 @@ function renderAgentDetail() {
         '<td class="num" style="font-size:11.5px;">' + esc(r.rpt || '-') + '</td></tr>').join('') + '</table></div>';
 }
 
+/* ---------- 다중 선택 드롭다운 ---------- */
+const msSel = {}; // 컨테이너 id → 선택된 값 Set (비어 있으면 '전체')
+function msInit(id, values, onChange) {
+  const el = $(id);
+  const sel = msSel[id] = new Set();
+  el.innerHTML = '<button type="button" class="ms-btn">전체</button>' +
+    '<div class="ms-pop">' +
+    values.map(v => '<label class="ms-opt"><input type="checkbox" value="' + esc(v) + '">' + esc(v) + '</label>').join('') +
+    '<button type="button" class="ms-clear">선택 해제</button></div>';
+  const btn = el.querySelector('.ms-btn');
+  const sync = () => {
+    const n = sel.size;
+    btn.textContent = n === 0 ? '전체' : (n === 1 ? [...sel][0] : [...sel][0] + ' 외 ' + (n - 1) + '개');
+    btn.title = n ? [...sel].join(', ') : '전체';
+    btn.classList.toggle('has', n > 0);
+  };
+  btn.addEventListener('click', e => {
+    e.stopPropagation();
+    const open = el.classList.contains('open');
+    document.querySelectorAll('.ms.open').forEach(o => o.classList.remove('open')); // 다른 드롭다운은 닫기
+    el.classList.toggle('open', !open);
+  });
+  el.querySelector('.ms-pop').addEventListener('click', e => e.stopPropagation());
+  el.querySelectorAll('.ms-opt input').forEach(cb => cb.addEventListener('change', () => {
+    if (cb.checked) sel.add(cb.value); else sel.delete(cb.value);
+    sync(); onChange();
+  }));
+  el.querySelector('.ms-clear').addEventListener('click', () => {
+    sel.clear();
+    el.querySelectorAll('.ms-opt input').forEach(cb => cb.checked = false);
+    sync(); onChange();
+  });
+  sync();
+}
+function msClear(id) {
+  const el = $(id);
+  if (!msSel[id]) return;
+  msSel[id].clear();
+  el.querySelectorAll('.ms-opt input').forEach(cb => cb.checked = false);
+  const btn = el.querySelector('.ms-btn');
+  if (btn) { btn.textContent = '전체'; btn.title = '전체'; btn.classList.remove('has'); }
+}
+document.addEventListener('click', () => document.querySelectorAll('.ms.open').forEach(o => o.classList.remove('open')));
+
 /* ---------- 로우데이터 검색 (seed + seed(정산용) 병합) ---------- */
 let searchInit = false, searchRows = [], searchQ = '';
 /* 검색 탭 기본 기간: 최근 7일 (사용자가 기간을 바꾸기 전까지) */
@@ -1438,10 +1529,10 @@ function setSearchDefaultRange() {
   $('sFrom').value = dateToDs(addDays(today, -6));
 }
 function initSearchFilters() {
-  const opts = (id, vals) => { $(id).innerHTML = '<option value="">전체</option>' + vals.map(v => '<option>' + esc(v) + '</option>').join(''); };
-  opts('sResult', [...new Set(DATA.seed.map(r => r.result))].sort());
-  opts('sMso', [...new Set(DATA.seed.map(r => r.mso))].sort());
-  opts('sSo', [...new Set(DATA.seed.map(r => r.soG))].sort()); // CNM 계열은 'CNM' 하나로 묶음
+  const uniq = f => [...new Set(DATA.seed.map(f))].filter(Boolean).sort();
+  msInit('sResult', uniq(r => r.result), runSearch);
+  msInit('sMso', uniq(r => r.mso), runSearch);
+  msInit('sSo', uniq(r => r.soG), runSearch); // CNM 계열은 'CNM' 하나로 묶음
   searchInit = true;
 }
 function runSearch() {
@@ -1450,7 +1541,8 @@ function runSearch() {
   const val = id => $(id).value.trim();
   const f = {
     from: val('sFrom'), to: val('sTo'),
-    agent: val('sAgent').toLowerCase(), result: $('sResult').value, mso: $('sMso').value, so: $('sSo').value,
+    agent: val('sAgent').toLowerCase(),
+    result: msSel.sResult || new Set(), mso: msSel.sMso || new Set(), so: msSel.sSo || new Set(),
     rpt: val('sRpt').toLowerCase(), all: val('sAll').toLowerCase(),
   };
   searchQ = f.all;
@@ -1459,9 +1551,10 @@ function runSearch() {
     if (f.from && r.date < f.from) return false;
     if (f.to && r.date > f.to) return false;
     if (f.agent && !inc(r.agent, f.agent)) return false;
-    if (f.result && r.result !== f.result) return false;
-    if (f.mso && r.mso !== f.mso) return false;
-    if (f.so && r.soG !== f.so) return false;
+    // 다중 선택: 아무것도 안 고르면 전체, 여러 개 고르면 그중 하나라도 맞으면 통과(OR)
+    if (f.result.size && !f.result.has(r.result)) return false;
+    if (f.mso.size && !f.mso.has(r.mso)) return false;
+    if (f.so.size && !f.so.has(r.soG)) return false;
     if (f.rpt && !inc(r.rpt, f.rpt)) return false;
     if (f.all) {
       // 고객명·가입번호는 화면에 표시하지 않지만 통합 검색 대상에는 포함한다
@@ -2223,13 +2316,21 @@ function renderExports() {
   }));
 }
 
+/* 근태만 실패했을 때의 경고 — 대시보드 나머지는 정상 동작하므로 막지 않는다 */
+function attendWarn(html) {
+  const bar = $('errbar');
+  bar.style.display = 'block';
+  bar.innerHTML = '⚠ ' + html;
+}
+
 /* ---------- 로딩 ---------- */
 async function loadAll() {
   if (!accessToken) { $('loginGate').style.display = 'flex'; return; }
   $('overlay').style.display = 'flex';
   $('errbar').style.display = 'none';
   const keys = Object.keys(RAW_TABS);
-  $('loadList').innerHTML = keys.map(k => '<li id="ld-' + k + '">' + RAW_TABS[k].label + ' <span class="st">불러오는 중…</span></li>').join('');
+  $('loadList').innerHTML = keys.map(k => '<li id="ld-' + k + '">' + RAW_TABS[k].label + ' <span class="st">불러오는 중…</span></li>').join('') +
+    '<li id="ld-attend">' + ATTEND_TAB.label + ' <span class="st">불러오는 중…</span></li>';
   try {
     const ranges = {}; keys.forEach(k => { ranges[k] = RAW_TABS[k].range; });
     const result = await apiBatchGet(ranges);
@@ -2241,6 +2342,7 @@ async function loadAll() {
     });
   } catch (e) {
     keys.forEach(k => { const li = $('ld-' + k); li.className = 'fail'; li.querySelector('.st').textContent = '✗'; });
+    $('ld-attend').className = 'fail'; $('ld-attend').querySelector('.st').textContent = '✗';
     const bar = $('errbar');
     bar.style.display = 'block';
     const need401 = /401|만료/.test(e.message);
@@ -2249,6 +2351,28 @@ async function loadAll() {
       '<div style="color:var(--muted);font-size:12px;margin-top:2px;">구글시트가 로그인한 계정에 공유되어 있는지, Sheets API가 사용 설정되었는지 확인해 주세요.</div>';
     $('overlay').style.display = 'none';
     return;
+  }
+  // 근태특이사항 (별도 스프레드시트) — 실패해도 나머지 대시보드는 그대로 보여준다
+  attendLoaded = false; attendCols = null;
+  try {
+    const res = await apiBatchGet({ attend: ATTEND_TAB.range }, ATTEND_SHEET_ID);
+    normalize('attend', res.attend || []);
+    const li = $('ld-attend'), st = li.querySelector('.st');
+    if (!attendCols) {
+      li.className = 'fail';
+      st.textContent = '✗ 이름·날짜 열을 찾지 못함';
+      attendWarn('근태특이사항 시트에서 이름·날짜 열을 찾지 못해 근태를 계산하지 못했습니다. 1행 헤더에 「이름」·「날짜」가 있는지 확인해 주세요.');
+    } else {
+      attendLoaded = true;
+      li.className = 'done';
+      st.textContent = '✓ ' + fmt(DATA.attend.length) + '건';
+    }
+  } catch (e) {
+    const li = $('ld-attend');
+    li.className = 'fail';
+    li.querySelector('.st').textContent = '✗';
+    attendWarn('근태특이사항 시트를 불러오지 못해 근태 지표가 «-»로 표시됩니다 — ' + esc(e.message) +
+      ' &nbsp;<a href="' + ATTEND_URL + '/edit" target="_blank" rel="noopener">시트 열기 ↗</a>');
   }
   $('updatedAt').textContent = '데이터 기준: ' + new Date().toLocaleString('ko-KR');
   setTimeout(() => { $('overlay').style.display = 'none'; }, 300);
@@ -2315,10 +2439,10 @@ $('dReset').addEventListener('click', () => {
   let sTimer = null;
   const deb = () => { clearTimeout(sTimer); sTimer = setTimeout(runSearch, 250); };
   ['sAgent', 'sRpt', 'sAll'].forEach(id => $(id).addEventListener('input', deb));
-  ['sFrom', 'sTo', 'sResult', 'sMso', 'sSo'].forEach(id => $(id).addEventListener('change', runSearch));
+  ['sFrom', 'sTo'].forEach(id => $(id).addEventListener('change', runSearch)); // 드롭다운은 msInit에서 연결
   $('sReset').addEventListener('click', () => {
     ['sAgent', 'sRpt', 'sAll'].forEach(id => $(id).value = '');
-    ['sResult', 'sMso', 'sSo'].forEach(id => $(id).value = '');
+    ['sResult', 'sMso', 'sSo'].forEach(msClear);
     setSearchDefaultRange(); // 초기화 시에도 기본 기간(최근 7일)으로 되돌린다
     runSearch();
   });
