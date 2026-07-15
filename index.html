@@ -300,8 +300,15 @@ table.list td.num{font-variant-numeric:tabular-nums;}
     <h2>점검자 분석</h2>
     <div class="sub">점검량 = seed(인정 O) + remote(2차) + 컴퓨터주치의 + 실시간원격주치의 · 리뷰점수·선택동의율은 운영 산식 기준</div>
     <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap;">
-      <span style="color:var(--muted);font-size:12.5px;">조회 월</span>
+      <span style="color:var(--muted);font-size:12.5px;">조회</span>
+      <button class="chip agModeBtn on" data-m="month">월별</button>
+      <button class="chip agModeBtn" data-m="range">기간 지정</button>
       <select id="agentYm" class="selbox"></select>
+      <span id="agRangeWrap" style="display:none;align-items:center;gap:6px;">
+        <input type="date" id="agFrom" class="selbox"> ~ <input type="date" id="agTo" class="selbox">
+        <button class="chip" id="agApply">적용</button>
+      </span>
+      <span class="rangeinfo" id="agSpanInfo"></span>
     </div>
     <div class="kpis" id="agentKpis" style="margin-bottom:14px;"></div>
     <div class="card" style="margin-bottom:12px;">
@@ -974,14 +981,25 @@ function renderInflowTrend() {
 
 /* ---------- 점검자 분석 ---------- */
 let agentYm = null, agentSel = null, agentChecked = null, detailGran = 'month';
+let agentMode = 'month'; // 'month' | 'range'
+const agentRange = { from: null, to: null };
+/* 현재 조회 구간 {from, to, label} — 월별이면 해당 월 1일~말일, 기간이면 지정 구간 */
+function agentSpan() {
+  if (agentMode === 'range' && agentRange.from && agentRange.to)
+    return { from: agentRange.from, to: agentRange.to, label: agentRange.from + ' ~ ' + agentRange.to };
+  const [y, m] = (agentYm || '').split('-').map(Number);
+  const last = new Date(y, m, 0).getDate();
+  return { from: agentYm + '-01', to: agentYm + '-' + pad2(last), label: agentYm.replace('-', '년 ') + '월' };
+}
 const detailRange = { from: null, to: null };
 const AGENT_EXCLUDE = /취소|없음|^APP|미배정|테스트|^양동영$|^이현정$/i; // 양동영·이현정은 점검자 분석에서 집계 제외
 
-function computeAgentStats(ym) {
-  const seedM = DATA.seed.filter(r => r.date.slice(0, 7) === ym);
-  const remoteM = DATA.remote.filter(r => r.cym === ym && r.agent2 && !AGENT_EXCLUDE.test(r.agent2));
-  const compM = DATA.computer.filter(r => r.date.slice(0, 7) === ym && r.name);
-  const rtM = DATA.realtime.filter(r => r.date.slice(0, 7) === ym && r.agent);
+function computeAgentStats(from, to) {
+  const inR = ds => !!ds && ds >= from && ds <= to;
+  const seedM = DATA.seed.filter(r => inR(r.date));
+  const remoteM = DATA.remote.filter(r => inR(r.cdate) && r.agent2 && !AGENT_EXCLUDE.test(r.agent2));
+  const compM = DATA.computer.filter(r => inR(r.date) && r.name);
+  const rtM = DATA.realtime.filter(r => inR(r.date) && r.agent);
   // 점검자 후보: seed(인정 O)·remote 2차·컴퓨터주치의에 등장하는 이름 (실시간원격주치의는 집계에만 반영)
   const names = new Set();
   seedM.forEach(r => { if (r.agent && r.af === 'O' && !AGENT_EXCLUDE.test(r.agent)) names.add(r.agent); });
@@ -1022,11 +1040,20 @@ function renderAgentsPage() {
   sel.innerHTML = months.map(m => '<option value="' + m + '">' + m.replace('-', '년 ') + '월</option>').join('');
   if (!agentYm || !months.includes(agentYm)) agentYm = months[0];
   sel.value = agentYm;
+  // 기간 지정 기본값: 데이터 전체 범위
+  const allDates = DATA.seed.map(r => r.date).filter(Boolean).sort();
+  if (!agentRange.from && allDates.length) { agentRange.from = allDates[0]; agentRange.to = allDates[allDates.length - 1]; }
+  if (!$('agFrom').value) $('agFrom').value = agentRange.from || '';
+  if (!$('agTo').value) $('agTo').value = agentRange.to || '';
   renderAgents();
 }
 
 function renderAgents() {
-  const stats = computeAgentStats(agentYm);
+  const span = agentSpan();
+  $('agentYm').style.display = agentMode === 'month' ? '' : 'none';
+  $('agRangeWrap').style.display = agentMode === 'range' ? 'inline-flex' : 'none';
+  $('agSpanInfo').textContent = span.label;
+  const stats = computeAgentStats(span.from, span.to);
   const names = stats.map(a => a.name);
   // 선택 집합 유지 (월 변경·데이터 갱신 시 존재하는 이름만 유지, 비면 전체 선택)
   if (!agentChecked) agentChecked = new Set(names);
@@ -1040,15 +1067,16 @@ function renderAgents() {
   const sumScore = sel.reduce((s, a) => s + (a.score != null ? a.score * a.nDone : 0), 0);
   const sumDone = sel.reduce((s, a) => s + a.nDone, 0);
   const sumCn = sel.reduce((s, a) => s + a.cn, 0), sumCd = sel.reduce((s, a) => s + a.cd, 0);
+  const sumM2n = sel.reduce((s, a) => s + a.m2n, 0), sumM2d = sel.reduce((s, a) => s + a.m2d, 0);
   $('agentKpis').innerHTML =
-    kpi('총 점검량', fmt(totVol), '건', agentYm.replace('-', '년 ') + '월 · 선택 인원 합산') +
+    kpi('총 점검량', fmt(totVol), '건', span.label + ' · 선택 ' + fmt(sel.length) + '명 합산') +
     kpi('인당 평균 점검량', sel.length ? fmt1(totVol / sel.length) : '-', '건', '총 점검량 ÷ 선택 인원') +
-    kpi('점검자', fmt(sel.length), '명', '전체 ' + fmt(stats.length) + '명 중 선택') +
+    kpi('평균 선택동의율', sumCd ? fmt1(sumCn / sumCd * 100) : '-', '%', '선택 인원 합산 · 동의÷대상') +
     kpi('평균 리뷰점수', sumDone ? fmt1(sumScore / sumDone) : '-', '점', '선택 인원 합산 · 점수합÷완료건') +
-    kpi('평균 선택동의율', sumCd ? fmt1(sumCn / sumCd * 100) : '-', '%', '선택 인원 합산 · 동의÷대상');
+    kpi('평균 M2 설치율', sumM2d ? fmt1(sumM2n / sumM2d * 100) : '-', '%', '선택 인원 합산 · 설치÷완료 · LGU+');
 
   if (!stats.length) {
-    $('agentTable').innerHTML = '<div class="empty">해당 월에 점검 데이터가 없습니다</div>';
+    $('agentTable').innerHTML = '<div class="empty">해당 구간에 점검 데이터가 없습니다</div>';
     ['chAgVol', 'chAgScore', 'chAgConsent', 'chAgM2'].forEach(id => { $(id).innerHTML = '<div class="empty">-</div>'; });
     $('agentDetailCard').style.display = 'none';
     return;
@@ -1237,31 +1265,44 @@ function renderAgentDetail() {
   shareCmp('chDSym', 'sym');
   shareCmp('chDCause', 'cause');
   shareCmp('chDAct', 'act');
-  // 레이더: 조회 월 기준, 전체 점검자 평균 = 100%
-  const allStats = computeAgentStats(agentYm);
+  // 레이더: 조회 구간 기준, 전체 점검자 평균 = 100% (밖으로 갈수록 우수)
+  const span = agentSpan();
+  const allStats = computeAgentStats(span.from, span.to);
   const meRow = allStats.find(x => x.name === agentSel);
   const avgOf = arr => { const v = arr.filter(x => x != null && !isNaN(x)); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null; };
   if (!meRow) {
-    $('chDRadar').innerHTML = '<div class="empty">조회 월에 점검 데이터가 없습니다</div>';
+    $('chDRadar').innerHTML = '<div class="empty">조회 구간에 점검 데이터가 없습니다</div>';
     $('dRadarTable').innerHTML = '';
   } else {
     const attMine = DATA.attend.has(agentSel) ? DATA.attend.get(agentSel) : null;
     const attAvg = avgOf(allStats.map(a => DATA.attend.has(a.name) ? DATA.attend.get(a.name) : null));
-    const ratio = (m, a2) => m == null ? null : (a2 ? m / a2 * 100 : (m === 0 ? 100 : 150));
+    const RCAP = 170; // radarChart의 최대치와 동일 (만점)
+    // 높을수록 좋은 지표: 평균 대비 비율
+    const ratioUp = (m, a2) => m == null ? null : (a2 ? Math.min(m / a2 * 100, RCAP) : (m > 0 ? RCAP : 100));
+    // 낮을수록 좋은 지표(근태=지각): 지각 0이면 만점, 그 외는 평균/본인 (본인이 평균보다 적으면 100% 초과)
+    const ratioDown = (m, a2) => {
+      if (m == null) return null;
+      if (m === 0) return RCAP;                 // 지각 없음 = 만점
+      if (a2 == null || a2 === 0) return 40;    // 전체 평균은 0인데 본인만 지각
+      return Math.min(a2 / m * 100, RCAP);
+    };
     const axes = [
-      { label: '점검량', mine: meRow.vol, avg: avgOf(allStats.map(a => a.vol)), f: fmt, unit: '건' },
-      { label: '리뷰점수', mine: meRow.score, avg: avgOf(allStats.map(a => a.score)), f: fmt1, unit: '점' },
-      { label: '선택동의율', mine: meRow.consent, avg: avgOf(allStats.map(a => a.consent)), f: fmt1, unit: '%' },
-      { label: 'M2설치율', mine: meRow.m2, avg: avgOf(allStats.map(a => a.m2)), f: fmt1, unit: '%' },
-      { label: '근태(지각)', mine: attMine, avg: attAvg, f: fmt1, unit: '회' },
-    ].map(a => Object.assign(a, { ratio: ratio(a.mine, a.avg) }));
+      { label: '점검량', mine: meRow.vol, avg: avgOf(allStats.map(a => a.vol)), f: fmt, unit: '건', ratio: ratioUp(meRow.vol, avgOf(allStats.map(a => a.vol))) },
+      { label: '리뷰점수', mine: meRow.score, avg: avgOf(allStats.map(a => a.score)), f: fmt1, unit: '점', ratio: ratioUp(meRow.score, avgOf(allStats.map(a => a.score))) },
+      { label: '선택동의율', mine: meRow.consent, avg: avgOf(allStats.map(a => a.consent)), f: fmt1, unit: '%', ratio: ratioUp(meRow.consent, avgOf(allStats.map(a => a.consent))) },
+      { label: 'M2설치율', mine: meRow.m2, avg: avgOf(allStats.map(a => a.m2)), f: fmt1, unit: '%', ratio: ratioUp(meRow.m2, avgOf(allStats.map(a => a.m2))) },
+      { label: '근태', mine: attMine, avg: attAvg, f: fmt1, unit: '회', invert: true, ratio: ratioDown(attMine, attAvg) },
+    ];
     radarChart('chDRadar', axes, agentSel);
     $('dRadarTable').innerHTML = '<table class="list"><tr><th>지표</th><th style="text-align:right;">' + esc(agentSel) + '</th><th style="text-align:right;">전체 평균</th><th style="text-align:right;">평균 대비</th></tr>' +
-      axes.map(a => '<tr><td>' + a.label + '</td>' +
+      axes.map(a => {
+        const cmp = a.invert && a.mine === 0 ? '만점' : (a.ratio != null ? '<b>' + Math.round(a.ratio) + '%</b>' : '-');
+        return '<tr><td>' + a.label + (a.invert ? ' <span style="color:var(--muted);font-size:11px;">(지각)</span>' : '') + '</td>' +
         '<td class="num" style="text-align:right;font-weight:600;">' + (a.mine != null ? a.f(a.mine) + a.unit : '-') + '</td>' +
         '<td class="num" style="text-align:right;">' + (a.avg != null ? a.f(a.avg) + a.unit : '-') + '</td>' +
-        '<td class="num" style="text-align:right;">' + (a.ratio != null ? '<b>' + Math.round(a.ratio) + '%</b>' : '-') + '</td></tr>').join('') +
-      '</table><div style="font-size:11.5px;color:var(--muted);margin-top:6px;">※ 근태(지각)는 현황 탭 AG열(지각 횟수) 기준 — 낮을수록 양호. 레이더·평균은 조회 월(' + agentYm.replace('-', '.') + ') 전체 점검자 기준.</div>';
+        '<td class="num" style="text-align:right;">' + cmp + '</td></tr>';
+      }).join('') +
+      '</table><div style="font-size:11.5px;color:var(--muted);margin-top:6px;">※ 근태는 현황 탭 AG열 지각 횟수 — <b>낮을수록 우수</b>하며 지각이 없으면 만점으로 표시됩니다. 레이더는 모든 지표를 「밖으로 갈수록 우수」하게 정규화(전체 평균=100%)했습니다. 기준 구간: ' + span.label + ' 전체 점검자.</div>';
   }
   // 3점 미만 리뷰 (선택 점검자 · 선택 기간)
   const lowR = DATA.seed.filter(r => r.agent === agentSel && keySet.has(keyFn(r.date)) && r.score != null && r.score < 3)
@@ -2021,6 +2062,16 @@ $('inflowSo').addEventListener('change', () => { inflowSo = $('inflowSo').value;
 $('cApply').addEventListener('click', renderCompare);
 // 점검자 조회 월 (선택 인원·상세 점검자는 유지)
 $('agentYm').addEventListener('change', () => { agentYm = $('agentYm').value; renderAgents(); });
+document.querySelectorAll('.agModeBtn').forEach(btn => btn.addEventListener('click', () => {
+  agentMode = btn.dataset.m;
+  document.querySelectorAll('.agModeBtn').forEach(b => b.classList.toggle('on', b === btn));
+  renderAgents();
+}));
+$('agApply').addEventListener('click', () => {
+  const f = $('agFrom').value, t = $('agTo').value;
+  if (!f || !t || f > t) { alert('시작일과 종료일을 올바르게 선택해 주세요.'); return; }
+  agentRange.from = f; agentRange.to = t; renderAgents();
+});
 // 상세 분석: 점검자 선택 + 단위(월/주/일) + 기간 필터
 $('agentSelBox').addEventListener('change', () => { agentSel = $('agentSelBox').value; renderAgents(); });
 document.querySelectorAll('.dgranBtn').forEach(btn => btn.addEventListener('click', () => {
