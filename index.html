@@ -101,6 +101,12 @@ table.list th{color:var(--muted); font-weight:600; text-align:left; padding:6px 
 table.list td{padding:6px 10px 6px 0; border-bottom:1px solid var(--grid); vertical-align:top;}
 table.list td.num{font-variant-numeric:tabular-nums;}
 .scorechip{display:inline-block; min-width:26px; text-align:center; border-radius:6px; padding:1px 6px; font-weight:700; font-size:12px; color:#fff; background:var(--bad);}
+/* 평균 이하(열세) 값 강조 — 표 셀의 인라인 font-weight를 이겨야 해서 !important */
+td.below{color:var(--bad); font-weight:700 !important;}
+td.below::after{content:' ▼'; font-size:9px; vertical-align:1px;}
+.badge-hi{display:inline-block; font-size:9.5px; font-weight:800; padding:0 4px; border-radius:4px; background:var(--accent-soft); margin-left:4px; vertical-align:1px;}
+.legend-note{font-size:11.5px; color:var(--muted); margin-top:6px;}
+.legend-note b{color:var(--bad);}
 mark.hl{background:#ffe27a; color:#0b0b0b; border-radius:3px; padding:0 1px; font-weight:600;}
 @media (prefers-color-scheme: dark){ mark.hl{background:#8a6d00; color:#fff;} }
 
@@ -361,9 +367,9 @@ mark.hl{background:#ffe27a; color:#0b0b0b; border-radius:3px; padding:0 1px; fon
         <span style="color:var(--muted);font-size:12.5px;">점검자</span>
         <select id="agentSelBox" class="selbox"></select>
         <span style="color:var(--muted);font-size:12.5px;margin-left:10px;">단위</span>
-        <button class="chip dgranBtn on" data-g="month">월</button>
+        <button class="chip dgranBtn" data-g="month">월</button>
         <button class="chip dgranBtn" data-g="week">주</button>
-        <button class="chip dgranBtn" data-g="day">일</button>
+        <button class="chip dgranBtn on" data-g="day">일</button>
         <span style="color:var(--muted);font-size:12.5px;margin-left:10px;">기간</span>
         <input type="date" id="dFrom" class="selbox"> ~ <input type="date" id="dTo" class="selbox">
         <button class="chip" id="dApply">적용</button>
@@ -522,6 +528,7 @@ const RAW_LINK_TABS = [
 
 /* ---------- 유틸 ---------- */
 const $ = id => document.getElementById(id);
+const avgOf = arr => { const v = arr.filter(x => x != null && !isNaN(x)); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null; };
 const fmt = n => (n == null || isNaN(n)) ? '-' : Math.round(n).toLocaleString('ko-KR');
 const fmt1 = n => (n == null || isNaN(n)) ? '-' : (Math.round(n * 10) / 10).toLocaleString('ko-KR', { minimumFractionDigits: 1 });
 const pad2 = n => String(n).padStart(2, '0');
@@ -1104,7 +1111,7 @@ function renderInflowTrend() {
 }
 
 /* ---------- 점검자 분석 ---------- */
-let agentYm = null, agentSel = null, agentChecked = null, detailGran = 'month';
+let agentYm = null, agentSel = null, agentChecked = null, detailGran = 'day'; // 기본 기간이 이번 달이라 단위도 '일'
 let agentMode = 'month'; // 'month' | 'range'
 const agentRange = { from: null, to: null };
 /* 현재 조회 구간 {from, to, label} — 월별이면 해당 월 1일~말일, 기간이면 지정 구간 */
@@ -1116,6 +1123,14 @@ function agentSpan() {
   return { from: agentYm + '-01', to: agentYm + '-' + pad2(last), label: agentYm.replace('-', '년 ') + '월' };
 }
 const detailRange = { from: null, to: null };
+/* 상세 분석 기간 기본값: 이번 달 1일 ~ 오늘 (단위 '일' 기준으로 일별 추이가 그려진다) */
+function setDetailDefaultRange() {
+  const today = new Date();
+  detailRange.from = dateToDs(new Date(today.getFullYear(), today.getMonth(), 1));
+  detailRange.to = dateToDs(today);
+  $('dFrom').value = detailRange.from;
+  $('dTo').value = detailRange.to;
+}
 const AGENT_EXCLUDE = /취소|없음|^APP|미배정|테스트|^양동영$|^이현정$/i; // 양동영·이현정은 점검자 분석에서 집계 제외
 
 function computeAgentStats(from, to) {
@@ -1173,6 +1188,8 @@ function renderAgentsPage() {
   if (!agentRange.from && allDates.length) { agentRange.from = allDates[0]; agentRange.to = allDates[allDates.length - 1]; }
   if (!$('agFrom').value) $('agFrom').value = agentRange.from || '';
   if (!$('agTo').value) $('agTo').value = agentRange.to || '';
+  // 상세 분석 기간 기본값: 이번 달
+  if (!detailRange.from && !detailRange.to) setDetailDefaultRange();
   renderAgents();
 }
 
@@ -1210,6 +1227,15 @@ function renderAgents() {
     return;
   }
   const allChecked = agentChecked.size === names.length;
+  // 전체 점검자 평균 — 이보다 낮은 값은 빨갛게 강조 (지표 상세의 '전체 평균'과 같은 기준)
+  const avgVol = avgOf(stats.map(a => a.vol)), avgScore = avgOf(stats.map(a => a.score));
+  const avgConsent = avgOf(stats.map(a => a.consent)), avgM2 = avgOf(stats.map(a => a.m2));
+  const bel = (v, av) => (v != null && av != null && v < av) ? ' below' : '';
+  const avgParts = [];
+  if (avgVol != null) avgParts.push('점검량 ' + fmt1(avgVol) + '건');
+  if (avgScore != null) avgParts.push('리뷰점수 ' + fmt1(avgScore) + '점');
+  if (avgConsent != null) avgParts.push('선택동의율 ' + fmt1(avgConsent) + '%');
+  if (avgM2 != null) avgParts.push('M2설치율 ' + fmt1(avgM2) + '%');
   $('agentTable').innerHTML =
     '<div style="overflow-x:auto;"><table class="list"><tr>' +
     '<th style="width:34px;"><input type="checkbox" id="agChkAll"' + (allChecked ? ' checked' : '') + ' title="전체 선택/해제"></th>' +
@@ -1220,16 +1246,18 @@ function renderAgents() {
     stats.map(a =>
       '<tr class="agrow' + (a.name === agentSel ? ' sel' : '') + '" data-name="' + esc(a.name) + '">' +
       '<td><input type="checkbox" class="agchk" data-name="' + esc(a.name) + '"' + (agentChecked.has(a.name) ? ' checked' : '') + '></td>' +
-      '<td>' + esc(a.name) + '</td><td class="num" style="text-align:right;font-weight:600;">' + fmt(a.vol) + '</td>' +
+      '<td>' + esc(a.name) + '</td><td class="num' + bel(a.vol, avgVol) + '" style="text-align:right;font-weight:600;">' + fmt(a.vol) + '</td>' +
       '<td class="num" style="text-align:right;">' + fmt(a.sCnt) + '</td><td class="num" style="text-align:right;">' + fmt(a.rCnt) + '</td>' +
       '<td class="num" style="text-align:right;">' + fmt(a.cCnt) + '</td><td class="num" style="text-align:right;">' + fmt(a.tCnt) + '</td>' +
-      '<td class="num" style="text-align:right;">' + (a.score != null ? fmt1(a.score) : '-') + '</td>' +
+      '<td class="num' + bel(a.score, avgScore) + '" style="text-align:right;">' + (a.score != null ? fmt1(a.score) : '-') + '</td>' +
       '<td class="num" style="text-align:right;">' + fmt(a.nScored) + '/' + fmt(a.nDone) + '</td>' +
-      '<td class="num" style="text-align:right;">' + (a.consent != null ? fmt1(a.consent) + '%' : '-') + '</td>' +
+      '<td class="num' + bel(a.consent, avgConsent) + '" style="text-align:right;">' + (a.consent != null ? fmt1(a.consent) + '%' : '-') + '</td>' +
       '<td class="num" style="text-align:right;">' + fmt(a.cn) + '/' + fmt(a.cd) + '</td>' +
-      '<td class="num" style="text-align:right;">' + (a.m2 != null ? fmt1(a.m2) + '%' : '-') + '</td>' +
+      '<td class="num' + bel(a.m2, avgM2) + '" style="text-align:right;">' + (a.m2 != null ? fmt1(a.m2) + '%' : '-') + '</td>' +
       '<td class="num" style="text-align:right;">' + fmt(a.m2n) + '/' + fmt(a.m2d) + '</td></tr>'
-    ).join('') + '</table></div>';
+    ).join('') + '</table></div>' +
+    '<div class="legend-note">※ <b>빨간 값 ▼</b> = 전체 점검자 평균 미만' +
+    (avgParts.length ? ' (평균 — ' + avgParts.join(' · ') + ')' : '') + '</div>';
   document.querySelectorAll('#agentTable .agrow').forEach(tr =>
     tr.addEventListener('click', ev => {
       if (ev.target.classList.contains('agchk')) return;
@@ -1400,7 +1428,6 @@ function renderAgentDetail() {
   const span = agentSpan();
   const allStats = computeAgentStats(span.from, span.to);
   const meRow = allStats.find(x => x.name === agentSel);
-  const avgOf = arr => { const v = arr.filter(x => x != null && !isNaN(x)); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null; };
   if (!meRow) {
     $('chDRadar').innerHTML = '<div class="empty">조회 구간에 점검 데이터가 없습니다</div>';
     $('dRadarTable').innerHTML = '';
@@ -1430,13 +1457,15 @@ function renderAgentDetail() {
     radarChart('chDRadar', axes, agentSel);
     $('dRadarTable').innerHTML = '<table class="list"><tr><th>지표</th><th style="text-align:right;">' + esc(agentSel) + '</th><th style="text-align:right;">전체 평균</th><th style="text-align:right;">평균 대비</th></tr>' +
       axes.map(a => {
+        // 평균 대비 100% 미만 = 평균보다 열세 (근태처럼 낮을수록 좋은 지표도 ratio가 뒤집혀 있어 그대로 성립)
+        const low = a.ratio != null && a.ratio < 100;
         const cmp = a.invert && a.mine === 0 ? '만점' : (a.ratio != null ? '<b>' + Math.round(a.ratio) + '%</b>' : '-');
         return '<tr><td>' + a.label + (a.invert ? ' <span style="color:var(--muted);font-size:11px;">(특이사항)</span>' : '') + '</td>' +
-        '<td class="num" style="text-align:right;font-weight:600;">' + (a.mine != null ? a.f(a.mine) + a.unit : '-') + '</td>' +
+        '<td class="num' + (low ? ' below' : '') + '" style="text-align:right;font-weight:600;">' + (a.mine != null ? a.f(a.mine) + a.unit : '-') + '</td>' +
         '<td class="num" style="text-align:right;">' + (a.avg != null ? a.f(a.avg) + a.unit : '-') + '</td>' +
-        '<td class="num" style="text-align:right;">' + cmp + '</td></tr>';
+        '<td class="num' + (low ? ' below' : '') + '" style="text-align:right;">' + cmp + '</td></tr>';
       }).join('') +
-      '</table><div style="font-size:11.5px;color:var(--muted);margin-top:6px;">※ 근태는 <b>근태특이사항 시트 기록 1건당 -1점</b> (이름·날짜로 매칭, 조회 구간에 드는 기록만) — 특이사항이 없으면 만점으로 표시됩니다' +
+      '</table><div class="legend-note">※ <b>빨간 값 ▼</b> = 평균 대비 100% 미만 (전체 점검자 평균보다 열세). 근태는 <b style="color:var(--muted);">근태특이사항 시트 기록 1건당 -1점</b> (이름·날짜로 매칭, 조회 구간에 드는 기록만) — 특이사항이 없으면 만점으로 표시됩니다' +
       (attendCols ? ' · 인식한 열: ' + esc(attendCols.name) + ' / ' + esc(attendCols.date) : '') +
       '. 레이더는 모든 지표를 「밖으로 갈수록 우수」하게 정규화(전체 평균=100%)했습니다. 기준 구간: ' + span.label + ' 전체 점검자.</div>';
   }
@@ -1716,12 +1745,24 @@ function initInflowControls() {
 }
 function cmpKpi(label, a, b, unit, fmtFn = fmt) {
   const d = (a != null && b != null && b !== 0) ? (a - b) / b * 100 : null;
-  const box = (tag, color, v) =>
-    '<div style="flex:1;min-width:0;"><div style="font-size:11px;font-weight:700;color:' + color + ';">' + tag + '</div>' +
-    '<div style="font-size:22px;font-weight:700;letter-spacing:-.5px;">' + (v != null ? fmtFn(v) : '-') + '<small style="font-size:12px;font-weight:600;color:var(--ink2);margin-left:1px;">' + unit + '</small></div></div>';
+  // 더 높은 쪽을 크게·진하게, 낮은 쪽은 작고 흐리게 (값이 같거나 한쪽이 없으면 둘 다 기본 표기)
+  const hi = (a != null && b != null && a !== b) ? (a > b ? 'a' : 'b') : null;
+  const box = (tag, color, v, key) => {
+    const mode = hi == null ? 'eq' : (hi === key ? 'hi' : 'lo');
+    const size = mode === 'hi' ? 26 : (mode === 'lo' ? 19 : 22);
+    const weight = mode === 'hi' ? 800 : (mode === 'lo' ? 600 : 700);
+    const vColor = mode === 'hi' ? color : (mode === 'lo' ? 'var(--muted)' : 'var(--ink)');
+    return '<div style="flex:1;min-width:0;">' +
+      '<div style="font-size:11px;font-weight:700;color:' + color + ';">' + tag +
+        (mode === 'hi' ? '<span class="badge-hi" style="color:' + color + ';">▲ 높음</span>' : '') + '</div>' +
+      '<div style="font-size:' + size + 'px;font-weight:' + weight + ';letter-spacing:-.5px;color:' + vColor + ';">' +
+        (v != null ? fmtFn(v) : '-') +
+        '<small style="font-size:12px;font-weight:600;color:' + (mode === 'lo' ? 'var(--muted)' : 'var(--ink2)') + ';margin-left:1px;">' + unit + '</small>' +
+      '</div></div>';
+  };
   return '<div class="kpi"><div class="k-label">' + label + '</div>' +
-    '<div style="display:flex;gap:12px;margin-top:4px;">' + box('조건 A', 'var(--s1)', a) + box('조건 B', 'var(--s3)', b) + '</div>' +
-    '<div class="k-sub">' + (d != null ? 'A가 B 대비 <b>' + (d >= 0 ? '+' : '') + d.toFixed(1) + '%</b>' : '비교 불가') + '</div></div>';
+    '<div style="display:flex;gap:12px;margin-top:4px;align-items:flex-end;">' + box('조건 A', 'var(--s1)', a, 'a') + box('조건 B', 'var(--s3)', b, 'b') + '</div>' +
+    '<div class="k-sub">' + (d != null ? 'A가 B 대비 <b style="color:' + (d >= 0 ? 'var(--s1)' : 'var(--s3)') + ';">' + (d >= 0 ? '+' : '') + d.toFixed(1) + '%</b>' : '비교 불가') + '</div></div>';
 }
 function renderCompare() {
   const cond = p => ({ from: $(p + 'From').value, to: $(p + 'To').value, so: $(p + 'So').value, mso: $(p + 'Mso').value });
@@ -2418,8 +2459,7 @@ $('dApply').addEventListener('click', () => {
   renderAgentDetail();
 });
 $('dReset').addEventListener('click', () => {
-  detailRange.from = null; detailRange.to = null;
-  $('dFrom').value = ''; $('dTo').value = '';
+  setDetailDefaultRange(); // 기본값(이번 달)으로 되돌린다
   renderAgentDetail();
 });
 // 로우데이터 검색
