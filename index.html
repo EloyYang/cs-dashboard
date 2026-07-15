@@ -390,6 +390,11 @@ table.list td.num{font-variant-numeric:tabular-nums;}
         <div class="desc">선택 점검자가 받은 저점 리뷰 · 선택 기간 · 최신순 최대 20건</div>
         <div id="dLowReviews"></div>
       </div>
+      <div style="margin-top:16px;">
+        <h3 style="font-size:13.5px;color:var(--ink);margin-bottom:2px;">⚠️ 점검유형 누락 건 <span id="dMissInfo" style="font-weight:400;color:var(--muted);font-size:12px;"></span></h3>
+        <div class="desc">선택 점검자의 AG열 '입력누락' 건 · 선택 기간 · 최신순 최대 30건</div>
+        <div id="dMissList"></div>
+      </div>
     </div>
   </section>
 </div>
@@ -417,10 +422,9 @@ table.list td.num{font-variant-numeric:tabular-nums;}
     </div>
     <div class="card">
       <h3>검색 결과 <span id="sCount" style="font-weight:400;color:var(--muted);font-size:12.5px;"></span></h3>
-      <div class="desc">최신순 · 최대 300건 표시 · 행을 클릭하면 상세 내용(요청내용·리뷰)이 열립니다</div>
+      <div class="desc">최신순 · 최대 300건 표시 · 행을 클릭하면 그 자리에서 상세 내용(요청내용·리뷰)이 펼쳐집니다</div>
       <div id="sResults" style="overflow-x:auto;"></div>
     </div>
-    <div id="sDetail" style="margin-top:12px;"></div>
   </section>
 </div>
 
@@ -852,6 +856,16 @@ function renderKpis(seed, reviews) {
   // M2 설치율 (LGU+ · AL 공란 · 원격완료/A/S접수)
   const m2base = seed.filter(r => r.al === '' && r.so === 'LGU+' && (r.result === '원격 완료' || r.result === 'A/S 접수'));
   const m2n = m2base.filter(r => r.p === '설치' || r.p === '설치후삭제').length;
+  // 인당 하루 평균 처리 건수: SEED af='O' 기준, (점검자·날짜)별 O가 5건 이상인 날만 근무일로 카운팅
+  const pdMap = new Map(); // 점검자|날짜 → O 건수
+  for (const r of seed) {
+    if (r.af !== 'O' || !r.agent || AGENT_EXCLUDE.test(r.agent)) continue;
+    const k = r.agent + '|' + r.date;
+    pdMap.set(k, (pdMap.get(k) || 0) + 1);
+  }
+  let wdCount = 0, wdSum = 0;
+  for (const c of pdMap.values()) { if (c >= 5) { wdCount++; wdSum += c; } }
+  const dailyAvg = wdCount ? wdSum / wdCount : null;
   // 불만족 (리뷰 3점 이하)
   kpiDetailRows.unsat = seed.filter(r => r.score != null && r.score <= 3).sort((a, b) => b.date.localeCompare(a.date));
   // 점검유형 누락 (AG=입력누락, 이현정 제외)
@@ -870,9 +884,9 @@ function renderKpis(seed, reviews) {
   }
   $('kpis').innerHTML =
     kpi('총 인입', fmt(total), '건', '완료율 <b>' + (total ? (done / total * 100).toFixed(1) : '-') + '%</b> (' + fmt(done) + '건)' + deltaHtml) +
-    kpi('평균 리뷰점수', avgScore != null ? fmt1(avgScore) : '-', '점', '리뷰 응답 ' + fmt(scored) + '건 · 응답율 <b>' + (total ? (scored / total * 100).toFixed(1) : '-') + '%</b>') +
+    kpi('인당 하루 평균 처리', dailyAvg != null ? fmt1(dailyAvg) : '-', '건', '근무일 ' + fmt(wdCount) + '일 기준 (하루 O 5건 이상인 날)') +
+    kpi('평균 리뷰점수', avgScore != null ? fmt1(avgScore) : '-', '점', '응답 ' + fmt(scored) + '건 · 불만족(3점↓) <b>' + fmt(kpiDetailRows.unsat.length) + '건</b> · 클릭 상세', 'unsat') +
     kpi('M2 설치율', m2base.length ? fmt1(m2n / m2base.length * 100) : '-', '%', '설치 ' + fmt(m2n) + ' / 완료 ' + fmt(m2base.length) + ' · LGU+') +
-    kpi('불만족 건수', fmt(kpiDetailRows.unsat.length), '건', '리뷰 3점 이하 · <b>클릭하여 상세 보기</b>', 'unsat') +
     kpi('점검유형 누락', fmt(kpiDetailRows.miss.length), '건', 'AG=입력누락 · 이현정 제외 · <b>클릭하여 상세</b>', 'miss');
   document.querySelectorAll('#kpis .kpi[data-kpi]').forEach(el =>
     el.addEventListener('click', () => toggleKpiDetail(el.dataset.kpi)));
@@ -893,10 +907,10 @@ function renderKpiDetail() {
   el.innerHTML = '<div class="card"><h3>' + (isUnsat ? '😞 불만족 건 (리뷰 3점 이하)' : '⚠️ 점검유형 누락 건 (AG=입력누락 · 이현정 제외)') +
     ' <span style="font-weight:400;color:var(--muted);font-size:12.5px;">— ' + fmt(rows.length) + '건 · 최신순 최대 100건</span>' +
     ' <a href="#" onclick="toggleKpiDetail(null);return false;" style="float:right;font-size:12px;">닫기 ✕</a></h3>' +
-    '<div style="overflow-x:auto;max-height:420px;overflow-y:auto;"><table class="list"><tr><th style="width:90px;">접수일</th><th>SO (B열)</th><th>점검자 (D열)</th>' + (isUnsat ? '<th style="width:50px;">점수</th><th>리뷰</th>' : '<th>처리결과</th>') + '</tr>' +
+    '<div style="overflow-x:auto;max-height:420px;overflow-y:auto;"><table class="list"><tr><th style="width:90px;">접수일</th><th>SO (B열)</th><th>점검자 (D열)</th><th>레포트번호</th>' + (isUnsat ? '<th style="width:50px;">점수</th><th>리뷰</th>' : '<th>처리결과</th>') + '</tr>' +
     rows.slice(0, 100).map(r => {
       const sj = DATA.sjMap.get(r.rpt) || {};
-      return '<tr><td class="num">' + r.date + '</td><td>' + esc(r.so) + '</td><td>' + esc(r.agent) + '</td>' +
+      return '<tr><td class="num">' + r.date + '</td><td>' + esc(r.so) + '</td><td>' + esc(r.agent) + '</td><td class="num" style="font-size:11.5px;">' + esc(r.rpt || '-') + '</td>' +
         (isUnsat ? '<td><span class="scorechip">' + r.score + '</span></td><td>' + esc(sj.rtext && sj.rtext !== '리뷰없음' ? sj.rtext : '-') + '</td>' : '<td>' + esc(r.result) + '</td>') + '</tr>';
     }).join('') + '</table></div></div>';
 }
@@ -1255,14 +1269,17 @@ function renderAgentDetail() {
     [{ name: agentSel, color: 'var(--s1)', values: hrs.map(h => mineH.get(h) || 0) },
      { name: '선택 인원 평균', color: 'var(--s3)', dash: true, values: hrs.map(h => (grpH.get(h) || 0) / nGrp) }],
     { unit: '건', decimals: 1, height: 300 });
-  // 처리결과 분포 (접수일 기준, 전체 결과)
+  // 처리결과 분포 — 비율(%) 기준: 해당 점검자가 처리한 것 전체 중 각 결과가 몇 %인지 vs 선택 인원 평균 비율
   const seedR = DATA.seed.filter(r => keySet.has(keyFn(r.date)));
-  const mineRe = countBy(seedR.filter(r => r.agent === agentSel), r => r.result);
-  const grpRe = countBy(seedR.filter(r => agentChecked.has(r.agent)), r => r.result);
+  const mineReRows = seedR.filter(r => r.agent === agentSel);
+  const grpReRows = seedR.filter(r => agentChecked.has(r.agent));
+  const mineRe = countBy(mineReRows, r => r.result);
+  const grpRe = countBy(grpReRows, r => r.result);
+  const mineTot = mineReRows.length, grpTot = grpReRows.length;
   const reList = [...new Set([...mineRe.keys(), ...grpRe.keys()])]
-    .map(k => ({ label: k, a: mineRe.get(k) || 0, b: (grpRe.get(k) || 0) / nGrp }))
+    .map(k => ({ label: k, a: mineTot ? (mineRe.get(k) || 0) / mineTot * 100 : 0, b: grpTot ? (grpRe.get(k) || 0) / grpTot * 100 : 0 }))
     .sort((x, y) => y.a - x.a || y.b - x.b).slice(0, 8);
-  hbarCompare('chDResult', reList, { aName: agentSel, bName: '선택 인원 평균' });
+  hbarCompare('chDResult', reList, { aName: agentSel, bName: '선택 인원 평균', unit: '%', fmtA: v => fmt1(v) + '%', fmtB: v => fmt1(v) + '%' });
   // 요일별 처리건수 (완료일 기준, 인정 O)
   const seedD = DATA.seed.filter(r => r.cdate && r.af === 'O' && keySet.has(keyFn(r.cdate)));
   const mineD = countBy(seedD.filter(r => r.agent === agentSel), r => dsToDate(r.cdate).getDay());
@@ -1335,6 +1352,15 @@ function renderAgentDetail() {
         return '<tr><td class="num">' + r.date + '</td><td>' + esc(r.soG) + '</td><td>' + esc(r.result) + '</td>' +
           '<td><span class="scorechip">' + r.score + '</span></td><td>' + esc(txt) + '</td><td>' + esc(r.cust || '-') + '</td></tr>';
       }).join('') + '</table></div>';
+  // 점검유형 누락 건 (선택 점검자 · 선택 기간 · AG='입력누락')
+  const missR = DATA.seed.filter(r => r.agent === agentSel && keySet.has(keyFn(r.date)) && r.ag === '입력누락')
+    .sort((a, b) => b.date.localeCompare(a.date)).slice(0, 30);
+  $('dMissInfo').textContent = '— ' + info + ' · ' + fmt(missR.length) + '건';
+  $('dMissList').innerHTML = !missR.length
+    ? '<div class="empty">해당 기간에 점검유형 누락 건이 없습니다 🎉</div>'
+    : '<div style="overflow-x:auto;"><table class="list"><tr><th style="width:90px;">날짜</th><th style="width:110px;">SO</th><th style="width:110px;">처리결과</th><th>레포트번호</th><th style="width:90px;">고객명</th></tr>' +
+      missR.map(r => '<tr><td class="num">' + r.date + '</td><td>' + esc(r.soG) + '</td><td>' + esc(r.result) + '</td>' +
+        '<td class="num" style="font-size:11.5px;">' + esc(r.rpt || '-') + '</td><td>' + esc(r.cust || '-') + '</td></tr>').join('') + '</table></div>';
 }
 
 /* ---------- 로우데이터 검색 (seed + seed(정산용) 병합) ---------- */
@@ -1376,7 +1402,6 @@ function runSearch() {
   }).sort((a, b) => b.date.localeCompare(a.date) || (b.time || '').localeCompare(a.time || ''));
   searchRows = rows.slice(0, 300);
   $('sCount').textContent = '— ' + fmt(rows.length) + '건' + (rows.length > 300 ? ' (최신 300건 표시)' : '');
-  $('sDetail').innerHTML = '';
   if (!searchRows.length) { $('sResults').innerHTML = '<div class="empty">조건에 맞는 데이터가 없습니다</div>'; return; }
   const clip = (s, n) => { s = s || ''; return s.length > n ? esc(s.slice(0, n)) + '…' : esc(s); };
   $('sResults').innerHTML =
@@ -1391,18 +1416,30 @@ function runSearch() {
         '<td title="' + esc(sj.req || '') + '">' + (clip(sj.req, 28) || '-') + '</td>' +
         '<td title="' + esc(sj.resultJ || '') + '">' + (clip(sj.resultJ, 22) || '-') + '</td></tr>';
     }).join('') + '</table>';
-  document.querySelectorAll('#sResults .srow').forEach(tr => tr.addEventListener('click', () => {
-    document.querySelectorAll('#sResults .srow').forEach(t => t.classList.toggle('sel', t === tr));
-    renderSearchDetail(+tr.dataset.i);
-  }));
+  document.querySelectorAll('#sResults .srow').forEach(tr => tr.addEventListener('click', () => toggleSearchDetail(tr)));
 }
-function renderSearchDetail(i) {
+/* 클릭한 행 바로 아래에 상세를 펼침(다시 클릭 시 접기) */
+function toggleSearchDetail(tr) {
+  const next = tr.nextElementSibling;
+  const already = next && next.classList.contains('sdetail-row');
+  // 열려 있던 다른 상세 행 제거
+  document.querySelectorAll('#sResults .sdetail-row').forEach(el => el.remove());
+  document.querySelectorAll('#sResults .srow').forEach(t => t.classList.remove('sel'));
+  if (already) return; // 같은 행을 다시 클릭 → 접기
+  tr.classList.add('sel');
+  const colspan = tr.children.length;
+  const detail = document.createElement('tr');
+  detail.className = 'sdetail-row';
+  detail.innerHTML = '<td colspan="' + colspan + '" style="padding:0;background:var(--page);">' + searchDetailHtml(+tr.dataset.i) + '</td>';
+  tr.after(detail);
+}
+function searchDetailHtml(i) {
   const r = searchRows[i];
-  if (!r) { $('sDetail').innerHTML = ''; return; }
+  if (!r) return '';
   const sj = DATA.sjMap.get(r.rpt) || {};
   const fld = (k, v) => '<tr><th style="width:110px;white-space:nowrap;">' + k + '</th><td>' + (v ? esc(v) : '-') + '</td></tr>';
-  $('sDetail').innerHTML = '<div class="card"><h3>📄 상세 — ' + esc(r.rpt || '(레포트번호 없음)') + '</h3>' +
-    '<div class="grid c2" style="margin-top:8px;"><div><table class="list">' +
+  return '<div style="padding:14px 16px;border-top:2px solid var(--accent);"><h3 style="font-size:13.5px;margin-bottom:8px;">📄 상세 — ' + esc(r.rpt || '(레포트번호 없음)') + '</h3>' +
+    '<div class="grid c2"><div><table class="list">' +
     fld('접수일시', r.date + ' ' + (r.time || '')) + fld('점검자명', r.agent) + fld('처리결과', r.result) +
     fld('MSO / SO', r.mso + ' / ' + r.so) + fld('고객명', r.cust) + fld('가입번호', r.custNo) +
     fld('리뷰점수', r.score != null ? r.score + '점' : (sj.score != null ? sj.score + '점' : '리뷰없음')) +
@@ -1412,8 +1449,7 @@ function renderSearchDetail(i) {
     fld('리뷰내용', sj.rtext && sj.rtext !== '리뷰없음' ? sj.rtext : '-') +
     '</table></div></div>' +
     '<div style="margin-top:10px;"><div style="font-size:12px;color:var(--muted);margin-bottom:4px;">요청내용 (seed(정산용))</div>' +
-    '<div style="background:var(--page);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-size:13px;white-space:pre-wrap;">' + (sj.req ? esc(sj.req) : '- 정산용 데이터에 없는 건입니다 -') + '</div></div></div>';
-  $('sDetail').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    '<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-size:13px;white-space:pre-wrap;">' + (sj.req ? esc(sj.req) : '- 정산용 데이터에 없는 건입니다 -') + '</div></div></div>';
 }
 
 /* ---------- 조건 비교 (A vs B) ---------- */
