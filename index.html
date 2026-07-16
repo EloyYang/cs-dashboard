@@ -412,8 +412,8 @@ mark.hl{background:#ffe27a; color:#0b0b0b; border-radius:3px; padding:0 1px; fon
       </div>
       <div class="grid c2" style="margin-top:18px;row-gap:22px;">
         <div><h3 style="font-size:13.5px;color:var(--ink);margin-bottom:6px;">🏷️ SO별 처리건수 <span id="dSoInfo" style="font-weight:400;color:var(--muted);font-size:12px;"></span></h3><div id="chDSo"></div></div>
-        <div><h3 style="font-size:13.5px;color:var(--ink);margin-bottom:6px;">🕐 시간별 처리건수 <span style="font-weight:400;color:var(--muted);font-size:12px;">완료시각(H·I열) 기준</span></h3><div id="chDHour"></div></div>
-        <div><h3 style="font-size:13.5px;color:var(--ink);margin-bottom:6px;">📅 요일별 처리건수 <span style="font-weight:400;color:var(--muted);font-size:12px;">완료일 기준</span></h3><div id="chDDow"></div></div>
+        <div><h3 style="font-size:13.5px;color:var(--ink);margin-bottom:6px;">🕐 시간별 평균 처리건수 <span style="font-weight:400;color:var(--muted);font-size:12px;">완료시각 기준 · 실 근무일 평균(휴무 제외·반차 0.5)</span></h3><div id="chDHour"></div></div>
+        <div><h3 style="font-size:13.5px;color:var(--ink);margin-bottom:6px;">📅 요일별 평균 처리건수 <span style="font-weight:400;color:var(--muted);font-size:12px;">완료일 기준 · 근무한 해당 요일 하루당 평균</span></h3><div id="chDDow"></div></div>
         <div><h3 style="font-size:13.5px;color:var(--ink);margin-bottom:6px;">📋 처리결과 분포</h3><div id="chDResult"></div></div>
       </div>
       <div class="grid c3" style="margin-top:18px;">
@@ -1372,6 +1372,39 @@ function metricsSeries(nameSet, keys, keyFn) {
   }));
 }
 
+/* ── 교대근무(9~18 / 13~22) 기준 실 근무일 판정 ──
+   휴무 = 그날 인정(O) 처리 0건(데이터에 아예 없음) → 분모에서 자동 제외.
+   반차(0.5일) = 시프트 시작 3시간 또는 종료 3시간이 통째로 빈 날(늦게 시작/일찍 종료).
+   시프트는 처리 시각으로 추정 — 13~18시만 처리한 겹침 구간은 어느 시프트로 봐도 반차로 귀결되어 견고함. */
+const SHIFTS = [{ start: 9, end: 18 }, { start: 13, end: 22 }];
+function dayWeight(hourSet) {
+  const first = Math.min(...hourSet);
+  const s = first <= 12 ? SHIFTS[0] : SHIFTS[1]; // 오전(≤12시) 처리가 있으면 주간, 아니면 야간(겹침 포함)
+  const startEmpty = ![s.start, s.start + 1, s.start + 2].some(h => hourSet.has(h));
+  const endEmpty = ![s.end - 3, s.end - 2, s.end - 1].some(h => hourSet.has(h));
+  return (startEmpty || endEmpty) ? 0.5 : 1;
+}
+/* 점검자 1명: 완료(af=O) 기간 내 시간대·요일별 처리량 + 실 근무일수(반차 0.5 반영) */
+function agentWorkStats(agent, keySet, keyFn) {
+  const byDate = new Map(), volH = new Map(), volDow = new Map();
+  for (const r of DATA.seed) {
+    if (r.agent !== agent || r.af !== 'O' || !r.cdate || r.chour == null) continue;
+    if (!keySet.has(keyFn(r.cdate))) continue;
+    if (!byDate.has(r.cdate)) byDate.set(r.cdate, new Set());
+    byDate.get(r.cdate).add(r.chour);
+    volH.set(r.chour, (volH.get(r.chour) || 0) + 1);
+    const dow = dsToDate(r.cdate).getDay();
+    volDow.set(dow, (volDow.get(dow) || 0) + 1);
+  }
+  let workDays = 0; const wdByDow = new Map();
+  for (const [ds, hset] of byDate) {
+    const w = dayWeight(hset); workDays += w;
+    const dow = dsToDate(ds).getDay();
+    wdByDow.set(dow, (wdByDow.get(dow) || 0) + w);
+  }
+  return { workDays, wdByDow, volH, volDow };
+}
+
 function renderAgentDetail() {
   const card = $('agentDetailCard');
   if (!agentSel || !agentChecked || !agentChecked.size) { card.style.display = 'none'; return; }
@@ -1401,14 +1434,19 @@ function renderAgentDetail() {
     .map(so => ({ label: so, a: mineSo.get(so) || 0, b: (grpSo.get(so) || 0) / nGrp }))
     .sort((x, y) => y.a - x.a || y.b - x.b).slice(0, 10);
   hbarCompare('chDSo', soList, { aName: agentSel, bName: '선택 인원 평균' });
-  // 시간별 처리건수 (완료일자 H·완료시간 I열 기준, 인정 O)
-  const seedC = DATA.seed.filter(r => r.cdate && r.chour != null && r.af === 'O' && keySet.has(keyFn(r.cdate)));
-  const mineH = countBy(seedC.filter(r => r.agent === agentSel), r => r.chour);
-  const grpH = countBy(seedC.filter(r => agentChecked.has(r.agent)), r => r.chour);
-  const hrs = [...Array(24).keys()].filter(h => (mineH.get(h) || 0) + (grpH.get(h) || 0) > 0);
+  // 시간별 평균 처리건수 (완료시각 기준, 인정 O, 실 근무일 평균 — 휴무 제외·반차 0.5)
+  const meW = agentWorkStats(agentSel, keySet, keyFn);
+  const grpW = [...agentChecked].map(a => agentWorkStats(a, keySet, keyFn));
+  const hrs = [...Array(24).keys()].filter(h =>
+    (meW.volH.get(h) || 0) + grpW.reduce((s, w) => s + (w.volH.get(h) || 0), 0) > 0);
+  const mineHavg = h => meW.workDays ? (meW.volH.get(h) || 0) / meW.workDays : 0;
+  const grpHavg = h => {
+    const vals = grpW.filter(w => w.workDays > 0).map(w => (w.volH.get(h) || 0) / w.workDays);
+    return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
+  };
   lineCmp('chDHour', hrs.map(h => h + '시'),
-    [{ name: agentSel, color: 'var(--s1)', values: hrs.map(h => mineH.get(h) || 0) },
-     { name: '선택 인원 평균', color: 'var(--s3)', dash: true, values: hrs.map(h => (grpH.get(h) || 0) / nGrp) }],
+    [{ name: agentSel, color: 'var(--s1)', values: hrs.map(mineHavg) },
+     { name: '선택 인원 평균', color: 'var(--s3)', dash: true, values: hrs.map(grpHavg) }],
     { unit: '건', decimals: 1, height: 300 });
   // 처리결과 분포 — 비율(%) 기준: 해당 점검자가 처리한 것 전체 중 각 결과가 몇 %인지 vs 선택 인원 평균 비율
   const seedR = DATA.seed.filter(r => keySet.has(keyFn(r.date)));
@@ -1421,12 +1459,14 @@ function renderAgentDetail() {
     .map(k => ({ label: k, a: mineTot ? (mineRe.get(k) || 0) / mineTot * 100 : 0, b: grpTot ? (grpRe.get(k) || 0) / grpTot * 100 : 0 }))
     .sort((x, y) => y.a - x.a || y.b - x.b).slice(0, 8);
   hbarCompare('chDResult', reList, { aName: agentSel, bName: '선택 인원 평균', unit: '%', fmtA: v => fmt1(v) + '%', fmtB: v => fmt1(v) + '%' });
-  // 요일별 처리건수 (완료일 기준, 인정 O)
-  const seedD = DATA.seed.filter(r => r.cdate && r.af === 'O' && keySet.has(keyFn(r.cdate)));
-  const mineD = countBy(seedD.filter(r => r.agent === agentSel), r => dsToDate(r.cdate).getDay());
-  const grpD = countBy(seedD.filter(r => agentChecked.has(r.agent)), r => dsToDate(r.cdate).getDay());
-  hbarCompare('chDDow', [1, 2, 3, 4, 5, 6, 0].map(d => ({ label: DOW[d] + '요일', a: mineD.get(d) || 0, b: (grpD.get(d) || 0) / nGrp })),
-    { aName: agentSel, bName: '선택 인원 평균' });
+  // 요일별 평균 처리건수 (완료일 기준, 인정 O, 근무한 해당 요일 하루당 평균 — 반차 0.5)
+  const mineDavg = d => (meW.wdByDow.get(d) || 0) ? (meW.volDow.get(d) || 0) / meW.wdByDow.get(d) : 0;
+  const grpDavg = d => {
+    const vals = grpW.filter(w => (w.wdByDow.get(d) || 0) > 0).map(w => (w.volDow.get(d) || 0) / w.wdByDow.get(d));
+    return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
+  };
+  hbarCompare('chDDow', [1, 2, 3, 4, 5, 6, 0].map(d => ({ label: DOW[d] + '요일', a: mineDavg(d), b: grpDavg(d) })),
+    { aName: agentSel, bName: '선택 인원 평균', unit: '건', fmtA: fmt1, fmtB: fmt1 });
   // 증상·원인·조치 선택 비중 (조치사항 시트, 선택 기간, 비중 %)
   const jW = DATA.jochi.filter(r => keySet.has(keyFn(r.date)));
   const shareCmp = (id, field) => {
