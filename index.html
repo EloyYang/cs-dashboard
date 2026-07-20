@@ -477,6 +477,28 @@ mark.hl{background:#ffe27a; color:#0b0b0b; border-radius:3px; padding:0 1px; fon
     <div class="exports" id="exports"></div>
     <div class="rawlinks" id="rawlinks"></div>
   </section>
+
+  <section id="sec-tast" style="margin-top:26px;">
+    <h2>타스트 추출</h2>
+    <div class="sub">EPS 목록 엑셀(.xls)을 첨부하면 그 파일에서 <b>SO=LGU+ · 처리결과=A/S 접수</b> 건을 뽑아 가입번호/고객명/완료일자/완료시간 순으로 복사합니다 (개인정보는 첨부 파일에서만 처리 · 저장 안 함)</div>
+    <div class="card" style="margin-bottom:12px;">
+      <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;">
+        <label class="sfld">EPS 엑셀 파일<br><input type="file" id="tFile" accept=".xls,.xlsx,.htm,.html" class="selbox" style="padding:4px;"></label>
+        <label class="sfld">완료일자 기간 (비우면 전체)<br><input type="date" id="tFrom" class="selbox"> ~ <input type="date" id="tTo" class="selbox"></label>
+        <button class="btn primary" id="tCopy">📋 엑셀용 복사</button>
+        <span id="tCount" style="font-size:12.5px;color:var(--muted);"></span>
+      </div>
+      <div style="margin-top:12px;">
+        <div class="sfld" style="display:block;margin-bottom:4px;">이미 붙여넣은 데이터 (중복 제외용) — 가입번호·고객명·완료일자·완료시간을 그대로 붙여넣으면 그 건들은 결과에서 빠집니다</div>
+        <textarea id="tExclude" class="selbox" rows="4" style="width:100%;resize:vertical;font-size:12px;" placeholder="500141435022&#9;임건&#9;2026-07-14&#9;오후 6:04:48&#10;500061288038&#9;배동영&#9;2026-07-14&#9;오후 7:07:48"></textarea>
+      </div>
+    </div>
+    <div class="card">
+      <h3>추출 결과 <span id="tInfo" style="font-weight:400;color:var(--muted);font-size:12.5px;"></span></h3>
+      <div class="desc">복사 버튼을 누르면 헤더 없이 데이터 행만 탭 구분(TSV)으로 클립보드에 담깁니다 · 엑셀에 바로 붙여넣기 하세요</div>
+      <div id="tResults" style="overflow-x:auto;"></div>
+    </div>
+  </section>
 </div>
 </main>
 
@@ -1709,6 +1731,116 @@ function searchDetailHtml(i) {
     '<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-size:13px;white-space:pre-wrap;">' + (sj.req ? escHl(sj.req, searchQ) : '- 정산용 데이터에 없는 건입니다 -') + '</div></div></div>';
 }
 
+/* ---------- 타스트 추출 (업로드한 EPS 목록 엑셀에서 · SO=LGU+ · 처리결과=A/S 접수) ---------- */
+let tastRows = [], tastFileRows = null, tastFileName = '';
+// 비교용 정규화 — 공백 유무('A/S 접수' vs 'A/S접수')로 어긋나지 않게
+const tastNorm = s => String(s == null ? '' : s).replace(/\s+/g, '').toUpperCase();
+// '오후 6:04:48' · '18:04:48' → '18:04:48' — 시간 서식이 달라도 같은 건으로 인식
+function tastTimeKey(s) {
+  s = String(s == null ? '' : s).trim();
+  const m = /(오전|오후|AM|PM)?\s*(\d{1,2}):(\d{2})(?::(\d{2}))?/i.exec(s);
+  if (!m) return tastNorm(s);
+  let h = +m[2];
+  const ap = (m[1] || '').toUpperCase();
+  if (ap === '오후' || ap === 'PM') { if (h < 12) h += 12; }
+  else if (ap === '오전' || ap === 'AM') { if (h === 12) h = 0; }
+  return pad2(h) + ':' + m[3] + ':' + (m[4] || '00');
+}
+// 한 건 식별 키: 가입번호 + 완료일시
+const tastKey = (custNo, date, time) =>
+  tastNorm(custNo) + '|' + (parseDateStr(date) || tastNorm(date)) + '|' + tastTimeKey(time);
+// 붙여넣은 기존 데이터 → 제외 키 집합 (가입번호…완료일자 완료시간 순)
+function parseTastExclude(text) {
+  const set = new Set();
+  for (const line of String(text || '').split(/\r?\n/)) {
+    if (!line.trim()) continue;
+    const c = line.split(/\t| {2,}/).map(s => s.trim()).filter(Boolean);
+    if (c.length < 3) continue;
+    set.add(tastKey(c[0], c[c.length - 2], c[c.length - 1]));
+  }
+  return set;
+}
+// 업로드 파일(UTF-16/UTF-8 HTML 표) 파싱 → 헤더명으로 컬럼을 찾아 필요한 값만 추출
+async function readTastFile(file) {
+  const buf = new Uint8Array(await file.arrayBuffer());
+  let enc = 'utf-8';
+  if (buf[0] === 0xFF && buf[1] === 0xFE) enc = 'utf-16le';
+  else if (buf[0] === 0xFE && buf[1] === 0xFF) enc = 'utf-16be';
+  const text = new TextDecoder(enc).decode(buf);
+  const doc = new DOMParser().parseFromString(text, 'text/html');
+  const trs = [...doc.querySelectorAll('tr')];
+  if (!trs.length) throw new Error('표(행)를 찾을 수 없습니다 — EPS 목록 엑셀이 맞는지 확인해 주세요');
+  let hi = trs.findIndex(tr => tr.querySelector('th'));
+  if (hi < 0) hi = 0;
+  const headers = [...trs[hi].children].map(c => c.textContent.trim());
+  const find = (...names) => { for (const n of names) { const i = headers.indexOf(n); if (i >= 0) return i; } return -1; };
+  const col = { so: find('SO'), result: find('처리결과'), cdate: find('완료일자'), ctime: find('완료시간'), cust: find('고객명'), custNo: find('계약번호', '가입번호') };
+  const rows = [];
+  for (let i = 0; i < trs.length; i++) {
+    if (i === hi || trs[i].querySelector('th')) continue;   // 헤더(반복 포함) 스킵
+    const cells = [...trs[i].children];
+    if (!cells.length) continue;
+    const g = idx => (idx >= 0 && idx < cells.length) ? cells[idx].textContent.trim() : '';
+    rows.push({ so: g(col.so), result: g(col.result), cdate: g(col.cdate), ctime: g(col.ctime), cust: g(col.cust), custNo: g(col.custNo) });
+  }
+  return { rows, col, headers };
+}
+function runTast() {
+  if (!tastFileRows) {
+    $('tResults').innerHTML = '<div class="empty">EPS 엑셀 파일을 첨부해 주세요.</div>';
+    $('tCount').textContent = ''; $('tInfo').textContent = ''; return;
+  }
+  const from = $('tFrom').value, to = $('tTo').value;
+  const excl = parseTastExclude($('tExclude').value);
+  const seen = new Set();
+  let nDup = 0, nExcl = 0, nMatch = 0;
+  tastRows = [];
+  for (const r of tastFileRows) {
+    const cd = parseDateStr(r.cdate);
+    if (!cd) continue;                                   // 완료(완료일자) 없는 건 제외
+    if (from && cd < from) continue;
+    if (to && cd > to) continue;
+    if (tastNorm(r.so) !== 'LGU+') continue;
+    if (tastNorm(r.result) !== 'A/S접수') continue;
+    nMatch++;
+    const k = tastKey(r.custNo, cd, r.ctime);
+    if (seen.has(k)) { nDup++; continue; }               // 파일 내 중복
+    seen.add(k);
+    if (excl.has(k)) { nExcl++; continue; }              // 이미 붙여넣은 건
+    tastRows.push({ custNo: r.custNo, cust: r.cust, cdate: cd, ctime: r.ctime });
+  }
+  tastRows.sort((a, b) => a.cdate.localeCompare(b.cdate) || tastTimeKey(a.ctime).localeCompare(tastTimeKey(b.ctime)));
+  $('tCount').textContent = '복사 대상 ' + fmt(tastRows.length) + '건';
+  const parts = ['파일 ' + fmt(tastFileRows.length) + '행 · 조건 일치 ' + fmt(nMatch) + '건'];
+  if (nDup) parts.push('중복 ' + fmt(nDup) + '건 제외');
+  if (nExcl) parts.push('붙여넣은 데이터와 겹쳐 ' + fmt(nExcl) + '건 제외');
+  $('tInfo').textContent = '— ' + parts.join(' · ') + (tastFileName ? ' · ' + tastFileName : '');
+  if (!tastRows.length) {
+    $('tResults').innerHTML = '<div class="empty">' + (nMatch ? '조건에 맞는 건이 모두 제외되었습니다' : '이 파일에 조건(SO=LGU+ · A/S 접수)에 맞는 데이터가 없습니다') + '</div>';
+    return;
+  }
+  $('tResults').innerHTML =
+    '<table class="list"><tr><th style="width:140px;">가입번호</th><th style="width:110px;">고객명</th><th style="width:110px;">완료일자</th><th>완료시간</th></tr>' +
+    tastRows.map(r => '<tr><td class="num">' + esc(r.custNo || '') + '</td><td>' + esc(r.cust || '') + '</td>' +
+      '<td class="num">' + esc(r.cdate) + '</td><td class="num">' + esc(r.ctime || '') + '</td></tr>').join('') +
+    '</table>';
+}
+function tastTsv() { return tastRows.map(r => [r.custNo || '', r.cust || '', r.cdate, r.ctime || ''].join('\t')).join('\n'); }
+async function copyTast() {
+  if (!tastRows.length) { alert('복사할 데이터가 없습니다. EPS 엑셀 파일을 첨부해 주세요.'); return; }
+  const tsv = tastTsv();
+  try {
+    await navigator.clipboard.writeText(tsv);
+  } catch (e) { // 클립보드 권한이 없을 때 대비
+    const ta = document.createElement('textarea');
+    ta.value = tsv; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy'); } catch (e2) { alert('복사에 실패했습니다: ' + e2.message); } finally { ta.remove(); }
+  }
+  const btn = $('tCopy'), old = btn.textContent;
+  btn.textContent = '✓ ' + fmt(tastRows.length) + '건 복사됨';
+  setTimeout(() => { btn.textContent = old; }, 1800);
+}
 
 /* ---------- 조건 비교 (A vs B) ---------- */
 function initInflowControls() {
@@ -2451,6 +2583,35 @@ $('dReset').addEventListener('click', () => {
     setSearchDefaultRange(); // 초기화 시에도 기본 기간(최근 7일)으로 되돌린다
     runSearch();
   });
+})();
+
+// 타스트 추출 (업로드 파일 기반)
+(() => {
+  let tTimer = null;
+  $('tFile').addEventListener('change', async e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    $('tResults').innerHTML = '<div class="empty">파일 읽는 중…</div>';
+    try {
+      const parsed = await readTastFile(file);
+      const miss = ['so', 'result', 'cdate', 'ctime', 'custNo'].filter(k => parsed.col[k] < 0);
+      if (miss.length) {
+        tastFileRows = null;
+        $('tResults').innerHTML = '<div class="empty">필요한 컬럼을 찾지 못했습니다: ' + esc(miss.join(', ')) + ' — EPS 목록 형식이 맞는지 확인해 주세요</div>';
+        $('tCount').textContent = ''; $('tInfo').textContent = '';
+        return;
+      }
+      tastFileRows = parsed.rows; tastFileName = file.name;
+      runTast();
+    } catch (err) {
+      tastFileRows = null;
+      $('tResults').innerHTML = '<div class="empty">파일을 읽지 못했습니다: ' + esc(err.message) + '</div>';
+      $('tCount').textContent = ''; $('tInfo').textContent = '';
+    }
+  });
+  ['tFrom', 'tTo'].forEach(id => $(id).addEventListener('change', runTast));
+  $('tExclude').addEventListener('input', () => { clearTimeout(tTimer); tTimer = setTimeout(runTast, 250); });
+  $('tCopy').addEventListener('click', copyTast);
 })();
 
 document.querySelectorAll('.chip[data-preset]').forEach(ch => ch.addEventListener('click', () => applyPreset(ch.dataset.preset)));
