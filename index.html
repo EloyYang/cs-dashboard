@@ -345,6 +345,11 @@ mark.hl{background:#ffe27a; color:#0b0b0b; border-radius:3px; padding:0 1px; fon
       <div class="card"><h3>처리결과 분포</h3><div class="desc">건수 비교</div><div id="chCmpResult"></div></div>
       <div class="card"><h3>요일별 인입</h3><div class="desc">접수일 기준</div><div id="chCmpDow"></div></div>
     </div>
+    <div class="grid c3" style="margin-top:12px;">
+      <div class="card"><h3>증상 비교 (Top 8)</h3><div class="desc">조치사항 시트 · 완료날짜 기간만 반영 (SO/MSO 미적용)</div><div id="chCmpSym"></div></div>
+      <div class="card"><h3>원인 비교 (Top 8)</h3><div class="desc">조치사항 시트 · 완료날짜 기간만 반영 (SO/MSO 미적용)</div><div id="chCmpCause"></div></div>
+      <div class="card"><h3>조치 비교 (Top 8)</h3><div class="desc">조치사항 시트 · 완료날짜 기간만 반영 (SO/MSO 미적용)</div><div id="chCmpAct"></div></div>
+    </div>
   </section>
 </div>
 
@@ -1933,6 +1938,19 @@ function renderCompare() {
   // 요일별
   const da = countBy(ra, r => dsToDate(r.date).getDay()), db = countBy(rb, r => dsToDate(r.date).getDay());
   hbarCompare('chCmpDow', [0, 1, 2, 3, 4, 5, 6].map(d => ({ label: DOW[d], a: da.get(d) || 0, b: db.get(d) || 0 })), { aName: nameA, bName: nameB });
+  // 증상·원인·조치 (조치사항 시트 — 완료날짜 기간만 반영, SO/MSO 없음)
+  const jPick = f => DATA.jochi.filter(r => (!f.from || r.date >= f.from) && (!f.to || r.date <= f.to));
+  const jA = jPick(A), jB = jPick(B);
+  const jCmp = (id, field) => {
+    const ca = countBy(jA, r => r[field]), cb = countBy(jB, r => r[field]);
+    const items = [...new Set([...ca.keys(), ...cb.keys()])]
+      .map(k => ({ label: k, a: ca.get(k) || 0, b: cb.get(k) || 0 }))
+      .sort((x, y) => (y.a + y.b) - (x.a + x.b)).slice(0, 8);
+    hbarCompare(id, items, { aName: nameA, bName: nameB });
+  };
+  jCmp('chCmpSym', 'sym');
+  jCmp('chCmpCause', 'cause');
+  jCmp('chCmpAct', 'act');
 }
 
 /* ── 2계열 비교 라인차트 (null = 구간 끊김) ── */
