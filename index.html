@@ -482,8 +482,12 @@ mark.hl{background:#ffe27a; color:#0b0b0b; border-radius:3px; padding:0 1px; fon
     <h2>타스트 추출</h2>
     <div class="sub">EPS 목록 엑셀(.xls)을 첨부하면 그 파일에서 <b>SO=LGU+ · 처리결과=A/S 접수</b> 건을 뽑아 가입번호/고객명/완료일자/완료시간 순으로 복사합니다 (개인정보는 첨부 파일에서만 처리 · 저장 안 함)</div>
     <div class="card" style="margin-bottom:12px;">
+      <div id="tDrop" style="border:2px dashed var(--border);border-radius:10px;padding:20px;text-align:center;cursor:pointer;transition:background .15s,border-color .15s;margin-bottom:12px;">
+        <div style="font-size:13.5px;color:var(--ink2);">📄 EPS 엑셀 파일을 여기로 <b>끌어다 놓기</b> · 또는 <span style="color:var(--accent);text-decoration:underline;">클릭해서 선택</span></div>
+        <div id="tFileName" style="font-size:12px;color:var(--muted);margin-top:6px;"></div>
+        <input type="file" id="tFile" accept=".xls,.xlsx,.htm,.html" style="display:none;">
+      </div>
       <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;">
-        <label class="sfld">EPS 엑셀 파일<br><input type="file" id="tFile" accept=".xls,.xlsx,.htm,.html" class="selbox" style="padding:4px;"></label>
         <label class="sfld">완료일자 기간 (비우면 전체)<br><input type="date" id="tFrom" class="selbox"> ~ <input type="date" id="tTo" class="selbox"></label>
         <button class="btn primary" id="tCopy">📋 엑셀용 복사</button>
         <span id="tCount" style="font-size:12.5px;color:var(--muted);"></span>
@@ -1733,6 +1737,11 @@ function searchDetailHtml(i) {
 
 /* ---------- 타스트 추출 (업로드한 EPS 목록 엑셀에서 · SO=LGU+ · 처리결과=A/S 접수) ---------- */
 let tastRows = [], tastFileRows = null, tastFileName = '';
+function setTastDefaultRange() { // 완료일자 기본: 오늘 ~ 4일 전
+  const today = new Date();
+  $('tTo').value = dateToDs(today);
+  $('tFrom').value = dateToDs(addDays(today, -4));
+}
 // 비교용 정규화 — 공백 유무('A/S 접수' vs 'A/S접수')로 어긋나지 않게
 const tastNorm = s => String(s == null ? '' : s).replace(/\s+/g, '').toUpperCase();
 // '오후 6:04:48' · '18:04:48' → '18:04:48' — 시간 서식이 달라도 같은 건으로 인식
@@ -2585,12 +2594,14 @@ $('dReset').addEventListener('click', () => {
   });
 })();
 
-// 타스트 추출 (업로드 파일 기반)
+// 타스트 추출 (업로드 파일 기반 · 드래그앤드롭/클릭 선택)
 (() => {
   let tTimer = null;
-  $('tFile').addEventListener('change', async e => {
-    const file = e.target.files[0];
+  setTastDefaultRange(); // 완료일자 기본 기간: 오늘 ~ 4일 전
+  const drop = $('tDrop'), fileInput = $('tFile');
+  async function handleTastFile(file) {
     if (!file) return;
+    $('tFileName').textContent = '📎 ' + file.name;
     $('tResults').innerHTML = '<div class="empty">파일 읽는 중…</div>';
     try {
       const parsed = await readTastFile(file);
@@ -2608,6 +2619,16 @@ $('dReset').addEventListener('click', () => {
       $('tResults').innerHTML = '<div class="empty">파일을 읽지 못했습니다: ' + esc(err.message) + '</div>';
       $('tCount').textContent = ''; $('tInfo').textContent = '';
     }
+  }
+  drop.addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', e => handleTastFile(e.target.files[0]));
+  const hi = on => { drop.style.borderColor = on ? 'var(--accent)' : ''; drop.style.background = on ? 'var(--accent-soft)' : ''; };
+  ['dragenter', 'dragover'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); e.stopPropagation(); hi(true); }));
+  ['dragleave', 'dragend'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); e.stopPropagation(); hi(false); }));
+  drop.addEventListener('drop', e => {
+    e.preventDefault(); e.stopPropagation(); hi(false);
+    const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+    if (file) { fileInput.value = ''; handleTastFile(file); }
   });
   ['tFrom', 'tTo'].forEach(id => $(id).addEventListener('change', runTast));
   $('tExclude').addEventListener('input', () => { clearTimeout(tTimer); tTimer = setTimeout(runTast, 250); });
