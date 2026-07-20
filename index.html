@@ -242,16 +242,6 @@ mark.hl{background:#ffe27a; color:#0b0b0b; border-radius:3px; padding:0 1px; fon
     </div>
   </section>
 
-  <section id="sec-review">
-    <h2>고객 리뷰</h2>
-    <div class="sub">seed(정산용) 리뷰점수 기준 · 리뷰없음 제외</div>
-    <div class="card">
-      <h3>저점 리뷰 (6점 이하)</h3>
-      <div class="desc">최근순 최대 20건 — 불만 요인 파악용</div>
-      <div id="lowReviews"></div>
-    </div>
-  </section>
-
 </div>
 
 <!-- ═══════════ 인입 분석 ═══════════ -->
@@ -976,7 +966,7 @@ function dataTable(labels, series, colLabels) {
 }
 
 /* ---------- KPI ---------- */
-let kpiDetailRows = { unsat: [], miss: [] };
+let kpiDetailRows = { unsat: [], miss: [], noconsent: [], noinstall: [] };
 let kpiDetailOpen = null;
 function renderKpis(seed, reviews) {
   const total = seed.length;
@@ -1002,6 +992,18 @@ function renderKpis(seed, reviews) {
   kpiDetailRows.unsat = seed.filter(r => r.score != null && r.score <= 3).sort((a, b) => b.date.localeCompare(a.date));
   // 점검유형 누락 (AG=입력누락, 이현정 제외)
   kpiDetailRows.miss = seed.filter(r => r.ag === '입력누락' && r.agent !== '이현정').sort((a, b) => b.date.localeCompare(a.date));
+  // 선택동의율 (AL 공란 · AM/AN 대상 · U·V 모두 동의) — 점검자 분석 산식과 동일
+  const okC = r => (r.u || '').startsWith('동의') && (r.v || '').startsWith('동의');
+  let consN = 0, consD = 0;
+  for (const r of seed) {
+    if (r.al !== '') continue;
+    if (r.am && r.am.startsWith('대상')) { consD++; if (okC(r)) consN++; }
+    if (r.an && r.an.startsWith('대상')) { consD++; if (okC(r)) consN++; }
+  }
+  const consentRate = consD ? consN / consD * 100 : null;
+  // 상세 목록용: 선택동의 미동의 건(대상인데 미동의) · M2 미설치 건
+  kpiDetailRows.noconsent = seed.filter(r => r.al === '' && ((r.am && r.am.startsWith('대상')) || (r.an && r.an.startsWith('대상'))) && !okC(r)).sort((a, b) => b.date.localeCompare(a.date));
+  kpiDetailRows.noinstall = m2base.filter(r => !(r.p === '설치' || r.p === '설치후삭제')).sort((a, b) => b.date.localeCompare(a.date));
   // 직전 동일 길이 기간 대비 증감
   let deltaHtml = '';
   if (state.from && state.to) {
@@ -1017,8 +1019,9 @@ function renderKpis(seed, reviews) {
   $('kpis').innerHTML =
     kpi('총 인입', fmt(total), '건', '완료율 <b>' + (total ? (done / total * 100).toFixed(1) : '-') + '%</b> (' + fmt(done) + '건)' + deltaHtml) +
     kpi('인당 하루 평균 처리', dailyAvg != null ? fmt1(dailyAvg) : '-', '건', '근무일 ' + fmt(wdCount) + '일 기준 (하루 O 5건 이상인 날)') +
-    kpi('평균 리뷰점수', avgScore != null ? fmt1(avgScore) : '-', '점', '응답 ' + fmt(scored) + '건 · 불만족(3점↓) <b>' + fmt(kpiDetailRows.unsat.length) + '건</b> · 클릭 상세', 'unsat') +
-    kpi('M2 설치율', m2base.length ? fmt1(m2n / m2base.length * 100) : '-', '%', '설치 ' + fmt(m2n) + ' / 완료 ' + fmt(m2base.length) + ' · LGU+') +
+    kpi('평균 리뷰점수', avgScore != null ? fmt1(avgScore) : '-', '점', '응답 ' + fmt(scored) + '건 · ' + bigCount('불만족(3점↓)', kpiDetailRows.unsat.length) + ' · 클릭 상세', 'unsat') +
+    kpi('선택동의율', consentRate != null ? fmt1(consentRate) : '-', '%', '대상 ' + fmt(consD) + '건 · ' + bigCount('미동의', kpiDetailRows.noconsent.length) + ' · 클릭 상세', 'noconsent') +
+    kpi('M2 설치율', m2base.length ? fmt1(m2n / m2base.length * 100) : '-', '%', 'LGU+ 완료 ' + fmt(m2base.length) + '건 · ' + bigCount('미설치', kpiDetailRows.noinstall.length) + ' · 클릭 상세', 'noinstall') +
     kpi('점검유형 누락', fmt(kpiDetailRows.miss.length), '건', 'AG=입력누락 · 이현정 제외 · <b>클릭하여 상세</b>', 'miss');
   document.querySelectorAll('#kpis .kpi[data-kpi]').forEach(el =>
     el.addEventListener('click', () => toggleKpiDetail(el.dataset.kpi)));
@@ -1027,24 +1030,43 @@ function renderKpis(seed, reviews) {
 function kpi(label, value, unit, sub, clickKey) {
   return '<div class="kpi"' + (clickKey ? ' data-kpi="' + clickKey + '" style="cursor:pointer;"' : '') + '><div class="k-label">' + label + '</div><div class="k-value">' + value + '<small>' + unit + '</small></div><div class="k-sub">' + sub + '</div></div>';
 }
+// 누락 건수를 눈에 띄게 크게(빨강) 표시
+function bigCount(label, n) {
+  return label + ' <b style="font-size:16px;color:var(--bad);">' + fmt(n) + '건</b>';
+}
 function toggleKpiDetail(key) {
   kpiDetailOpen = kpiDetailOpen === key ? null : key;
   renderKpiDetail();
 }
+const KPI_DETAIL = {
+  unsat: {
+    title: '😞 불만족 건 (리뷰 3점 이하)', head: '<th style="width:50px;">점수</th><th>리뷰</th>',
+    cell: r => { const sj = DATA.sjMap.get(r.rpt) || {}; return '<td><span class="scorechip">' + r.score + '</span></td><td>' + esc(sj.rtext && sj.rtext !== '리뷰없음' ? sj.rtext : '-') + '</td>'; },
+  },
+  miss: {
+    title: '⚠️ 점검유형 누락 건 (AG=입력누락 · 이현정 제외)', head: '<th>처리결과</th>',
+    cell: r => '<td>' + esc(r.result) + '</td>',
+  },
+  noconsent: {
+    title: '🤝 선택동의 미동의 건 (AM/AN 대상 · AL 공란 · U·V 동의 아님)', head: '<th>선택동의1(U)</th><th>선택동의2(V)</th><th>처리결과</th>',
+    cell: r => '<td>' + esc(r.u || '-') + '</td><td>' + esc(r.v || '-') + '</td><td>' + esc(r.result) + '</td>',
+  },
+  noinstall: {
+    title: '🖥️ M2 미설치 건 (LGU+ · 원격완료/AS접수 · AL 공란)', head: '<th>설치여부(P)</th><th>처리결과</th>',
+    cell: r => '<td>' + esc(r.p || '-') + '</td><td>' + esc(r.result) + '</td>',
+  },
+};
 function renderKpiDetail() {
   const el = $('kpiDetail');
-  if (!kpiDetailOpen) { el.innerHTML = ''; return; }
-  const isUnsat = kpiDetailOpen === 'unsat';
+  const cfg = kpiDetailOpen && KPI_DETAIL[kpiDetailOpen];
+  if (!cfg) { el.innerHTML = ''; return; }
   const rows = kpiDetailRows[kpiDetailOpen] || [];
-  el.innerHTML = '<div class="card"><h3>' + (isUnsat ? '😞 불만족 건 (리뷰 3점 이하)' : '⚠️ 점검유형 누락 건 (AG=입력누락 · 이현정 제외)') +
+  el.innerHTML = '<div class="card"><h3>' + cfg.title +
     ' <span style="font-weight:400;color:var(--muted);font-size:12.5px;">— ' + fmt(rows.length) + '건 · 최신순 최대 100건</span>' +
     ' <a href="#" onclick="toggleKpiDetail(null);return false;" style="float:right;font-size:12px;">닫기 ✕</a></h3>' +
-    '<div style="overflow-x:auto;max-height:420px;overflow-y:auto;"><table class="list"><tr><th style="width:90px;">접수일</th><th>SO (B열)</th><th>점검자 (D열)</th><th>레포트번호</th>' + (isUnsat ? '<th style="width:50px;">점수</th><th>리뷰</th>' : '<th>처리결과</th>') + '</tr>' +
-    rows.slice(0, 100).map(r => {
-      const sj = DATA.sjMap.get(r.rpt) || {};
-      return '<tr><td class="num">' + r.date + '</td><td>' + esc(r.so) + '</td><td>' + esc(r.agent) + '</td><td class="num" style="font-size:11.5px;">' + esc(r.rpt || '-') + '</td>' +
-        (isUnsat ? '<td><span class="scorechip">' + r.score + '</span></td><td>' + esc(sj.rtext && sj.rtext !== '리뷰없음' ? sj.rtext : '-') + '</td>' : '<td>' + esc(r.result) + '</td>') + '</tr>';
-    }).join('') + '</table></div></div>';
+    '<div style="overflow-x:auto;max-height:420px;overflow-y:auto;"><table class="list"><tr><th style="width:90px;">접수일</th><th>SO (B열)</th><th>점검자 (D열)</th><th>레포트번호</th>' + cfg.head + '</tr>' +
+    rows.slice(0, 100).map(r => '<tr><td class="num">' + r.date + '</td><td>' + esc(r.so) + '</td><td>' + esc(r.agent) + '</td><td class="num" style="font-size:11.5px;">' + esc(r.rpt || '-') + '</td>' + cfg.cell(r) + '</tr>').join('') +
+    '</table></div></div>';
 }
 
 /* ---------- 전체 렌더 ---------- */
@@ -1101,12 +1123,6 @@ function renderAll() {
   hbar('chSym2', topN(countBy(jochi.filter(r => r.sym2), r => r.sym2), 10, false), { color: 'var(--s6)' });
   hbar('chCause2', topN(countBy(jochi.filter(r => r.cause2), r => r.cause2), 10, false), { color: 'var(--s3)' });
   hbar('chAct2', topN(countBy(jochi.filter(r => r.act2), r => r.act2), 10, false), { color: 'var(--s2)' });
-
-  // 저점 리뷰
-  const low = reviews.filter(r => r.score <= 6).sort((a, b) => b.date.localeCompare(a.date)).slice(0, 20);
-  $('lowReviews').innerHTML = !low.length ? '<div class="empty">선택 기간에 6점 이하 리뷰가 없습니다 🎉</div>' :
-    '<table class="list"><tr><th style="width:90px;">날짜</th><th style="width:130px;">SO</th><th style="width:50px;">점수</th><th>리뷰 내용</th></tr>' +
-    low.map(r => '<tr><td class="num">' + r.date + '</td><td>' + esc(r.so) + '</td><td><span class="scorechip">' + r.score + '</span></td><td>' + esc(r.text || '(내용 없음)') + '</td></tr>').join('') + '</table>';
 
   renderAgentsPage();
 }
