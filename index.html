@@ -1758,10 +1758,10 @@ function searchDetailHtml(i) {
 
 /* ---------- 타스트 추출 (업로드한 EPS 목록 엑셀에서 · SO=LGU+ · 처리결과=A/S 접수) ---------- */
 let tastRows = [], tastFileRows = null, tastFileName = '';
-function setTastDefaultRange() { // 완료일자 기본: 오늘 ~ 4일 전
-  const today = new Date();
-  $('tTo').value = dateToDs(today);
-  $('tFrom').value = dateToDs(addDays(today, -4));
+function setTastDefaultRange() { // 완료일자 기본: 어제 하루만 (하루 전 데이터)
+  const y = dateToDs(addDays(new Date(), -1));
+  $('tFrom').value = y;
+  $('tTo').value = y;
 }
 // 비교용 정규화 — 공백 유무('A/S 접수' vs 'A/S접수')로 어긋나지 않게
 const tastNorm = s => String(s == null ? '' : s).replace(/\s+/g, '').toUpperCase();
