@@ -1194,6 +1194,9 @@ function computeAgentStats(from, to) {
   remoteM.forEach(r => names.add(r.agent2));
   compM.forEach(r => { if (!AGENT_EXCLUDE.test(r.name)) names.add(r.name); });
   const okC = x => x.u.startsWith('동의') && x.v.startsWith('동의');
+  // 수동처리율 대상 처리결과: '점검완료'·'A/S 접수' (공백/슬래시 무시하고 비교)
+  const rn = s => (s || '').replace(/[\s/]/g, '').toUpperCase();
+  const MAN_TARGET = new Set(['점검완료', 'AS접수']);
   const out = [];
   for (const name of names) {
     const sCnt = seedM.filter(r => r.agent === name && r.af === 'O').length;
@@ -1216,7 +1219,11 @@ function computeAgentStats(from, to) {
     const m2base = seedM.filter(r => r.agent === name && r.al === '' && r.so === 'LGU+' && (r.result === '원격 완료' || r.result === 'A/S 접수'));
     const m2d = m2base.length;
     const m2n = m2base.filter(r => r.p === '설치' || r.p === '설치후삭제').length;
-    out.push({ name, vol: sCnt + rCnt + cCnt + tCnt, sCnt, rCnt, cCnt, tCnt, score, nScored, nDone: done.length, consent: cd ? cn / cd * 100 : null, cn, cd, m2: m2d ? m2n / m2d * 100 : null, m2n, m2d });
+    // 수동처리율 = (처리결과 점검완료·A/S접수 중 AL='수동') ÷ (처리결과 점검완료·A/S접수)
+    const manBase = seedM.filter(r => r.agent === name && MAN_TARGET.has(rn(r.result)));
+    const manD = manBase.length;
+    const manN = manBase.filter(r => (r.al || '').trim() === '수동').length;
+    out.push({ name, vol: sCnt + rCnt + cCnt + tCnt, sCnt, rCnt, cCnt, tCnt, score, nScored, nDone: done.length, consent: cd ? cn / cd * 100 : null, cn, cd, m2: m2d ? m2n / m2d * 100 : null, m2n, m2d, manual: manD ? manN / manD * 100 : null, manN, manD });
   }
   return out.filter(a => a.vol > 0).sort((a, b) => b.vol - a.vol);
 }
@@ -1544,19 +1551,26 @@ function renderAgentDetail() {
       { label: '근태', mine: attMine, avg: attAvg, f: v => v === 0 ? '0' : '-' + (Number.isInteger(v) ? fmt(v) : fmt1(v)), unit: '점', invert: true, ratio: ratioDown(attMine, attAvg) },
     ];
     radarChart('chDRadar', axes, agentSel);
+    // 수동처리율 = 처리결과 「점검완료·A/S접수」 중 AL='수동' 비율 (우열 방향 불명확 → 참고 지표로 표에만, 레이더 제외)
+    const manualAvg = avgOf(allStats.map(a => a.manual));
+    const tableRows = axes.concat([{
+      label: '수동처리율', mine: meRow.manual, avg: manualAvg, f: fmt1, unit: '%', neutral: true,
+      ratio: (meRow.manual != null && manualAvg) ? meRow.manual / manualAvg * 100 : null,
+    }]);
     $('dRadarTable').innerHTML = '<table class="list"><tr><th>지표</th><th style="text-align:right;">' + esc(agentSel) + '</th><th style="text-align:right;">전체 평균</th><th style="text-align:right;">평균 대비</th></tr>' +
-      axes.map(a => {
-        // 평균 대비 100% 미만 = 평균보다 열세 (근태처럼 낮을수록 좋은 지표도 ratio가 뒤집혀 있어 그대로 성립)
-        const low = a.ratio != null && a.ratio < 100;
+      tableRows.map(a => {
+        // 평균 대비 100% 미만 = 평균보다 열세 (근태처럼 낮을수록 좋은 지표도 ratio가 뒤집혀 있어 그대로 성립) · 참고 지표(neutral)는 우열 판정 안 함
+        const low = !a.neutral && a.ratio != null && a.ratio < 100;
         const cmp = a.invert && a.mine === 0 ? '만점' : (a.ratio != null ? '<b>' + Math.round(a.ratio) + '%</b>' : '-');
-        return '<tr><td>' + a.label + (a.invert ? ' <span style="color:var(--muted);font-size:11px;">(특이사항)</span>' : '') + '</td>' +
+        const note = a.invert ? ' <span style="color:var(--muted);font-size:11px;">(특이사항)</span>' : (a.neutral ? ' <span style="color:var(--muted);font-size:11px;">(참고)</span>' : '');
+        return '<tr><td>' + a.label + note + '</td>' +
         '<td class="num' + (low ? ' below' : '') + '" style="text-align:right;font-weight:600;">' + (a.mine != null ? a.f(a.mine) + a.unit : '-') + '</td>' +
         '<td class="num" style="text-align:right;">' + (a.avg != null ? a.f(a.avg) + a.unit : '-') + '</td>' +
         '<td class="num' + (low ? ' below' : '') + '" style="text-align:right;">' + cmp + '</td></tr>';
       }).join('') +
       '</table><div class="legend-note">※ <b>빨간 값 ▼</b> = 평균 대비 100% 미만 (전체 점검자 평균보다 열세). 근태는 <b style="color:var(--muted);">근태특이사항 시트 기록 1건당 -1점</b> (이름·날짜로 매칭, 조회 구간에 드는 기록만) — 특이사항이 없으면 만점으로 표시됩니다' +
       (attendCols ? ' · 인식한 열: ' + esc(attendCols.name) + ' / ' + esc(attendCols.date) : '') +
-      '. 레이더는 모든 지표를 「밖으로 갈수록 우수」하게 정규화(전체 평균=100%)했습니다. 기준 구간: ' + span.label + ' 전체 점검자.</div>';
+      '. <b>수동처리율(참고)</b>은 처리결과 「점검완료·A/S 접수」 중 AL=수동 비율 — 우열 판정 없이 표에만 표시(레이더 제외). 레이더는 나머지 지표를 「밖으로 갈수록 우수」하게 정규화(전체 평균=100%)했습니다. 기준 구간: ' + span.label + ' 전체 점검자.</div>';
   }
   // 3점 미만 리뷰 (선택 점검자 · 선택 기간)
   const lowR = DATA.seed.filter(r => r.agent === agentSel && keySet.has(keyFn(r.date)) && r.score != null && r.score < 3)
