@@ -365,6 +365,17 @@ mark.hl{background:#ffe27a; color:#0b0b0b; border-radius:3px; padding:0 1px; fon
       <div class="desc">체크박스로 분석 대상 인원을 고르면 위 요약과 아래 차트·평균 비교에 반영됩니다 · 행을 클릭하면 해당 점검자 상세 분석으로 이동</div>
       <div id="agentTable"></div>
     </div>
+    <div class="card" style="margin-bottom:12px;">
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:6px;">
+        <h3 style="margin:0;">일자별 지표 (점검자 × 날짜)</h3>
+        <span style="color:var(--muted);font-size:12.5px;margin-left:6px;">지표</span>
+        <button class="chip pivotBtn on" data-p="score">리뷰점수</button>
+        <button class="chip pivotBtn" data-p="consent">선택동의율</button>
+        <button class="chip pivotBtn" data-p="vol">점검량</button>
+      </div>
+      <div class="desc">행 = 점검자(체크 인원) · 열 = 날짜 · 셀 = 선택 지표의 그 날 값 · 「·」 = 데이터 없음 · 데이터 있는 날짜만 표시</div>
+      <div id="agentPivot" style="overflow-x:auto;"></div>
+    </div>
     <div class="grid c2">
       <div class="card"><h3>점검량</h3><div class="desc">선택 인원 · 4개 서비스 합산</div><div id="chAgVol"></div></div>
       <div class="card"><h3>리뷰점수</h3><div class="desc">선택 인원 · 운영 산식 (점수합 ÷ 완료건)</div><div id="chAgScore"></div></div>
@@ -1228,6 +1239,69 @@ function computeAgentStats(from, to) {
   return out.filter(a => a.vol > 0).sort((a, b) => b.vol - a.vol);
 }
 
+/* ── 일자별 (점검자 × 날짜) 지표: 점검량·리뷰점수·선택동의율 ── */
+function computeAgentDaily(from, to) {
+  const inR = ds => !!ds && ds >= from && ds <= to;
+  const okC = x => x.u.startsWith('동의') && x.v.startsWith('동의');
+  const M = new Map();
+  const acc = (name, date) => {
+    let dm = M.get(name); if (!dm) { dm = new Map(); M.set(name, dm); }
+    let a = dm.get(date); if (!a) { a = { vol: 0, scoreSum: 0, nDone: 0, cn: 0, cd: 0 }; dm.set(date, a); }
+    return a;
+  };
+  for (const r of DATA.seed) {
+    if (!inR(r.date) || !r.agent || AGENT_EXCLUDE.test(r.agent)) continue;
+    if (r.af === 'O') acc(r.agent, r.date).vol++;
+    if (r.al === '') {
+      if (!r.so.includes('1833') && (r.result === '원격 완료' || r.result === 'A/S 접수')) {
+        const a = acc(r.agent, r.date); a.nDone++; a.scoreSum += r.score || 0;
+      }
+      if (r.am.startsWith('대상')) { const a = acc(r.agent, r.date); a.cd++; if (okC(r)) a.cn++; }
+      if (r.an.startsWith('대상')) { const a = acc(r.agent, r.date); a.cd++; if (okC(r)) a.cn++; }
+    }
+  }
+  for (const r of DATA.remote) { if (inR(r.cdate) && r.agent2 && !AGENT_EXCLUDE.test(r.agent2)) acc(r.agent2, r.cdate).vol++; }
+  for (const r of DATA.computer) { if (inR(r.date) && r.name && !AGENT_EXCLUDE.test(r.name)) acc(r.name, r.date).vol++; }
+  for (const r of DATA.realtime) { if (inR(r.date) && r.agent && !AGENT_EXCLUDE.test(r.agent)) acc(r.agent, r.date).vol++; }
+  return M;
+}
+let pivotMetric = 'score';
+let pivotState = null;
+const PIVOT_META = {
+  vol: { label: '점검량', val: a => a.vol, fmt: v => fmt(v) },
+  score: { label: '리뷰점수', val: a => a.nDone ? a.scoreSum / a.nDone : null, fmt: v => fmt1(v) },
+  consent: { label: '선택동의율', val: a => a.cd ? a.cn / a.cd * 100 : null, fmt: v => fmt1(v) + '%' },
+};
+function renderAgentPivot(span, names) {
+  const daily = computeAgentDaily(span.from, span.to);
+  const dateSet = new Set();
+  names.forEach(n => { const dm = daily.get(n); if (dm) dm.forEach((_, d) => dateSet.add(d)); });
+  pivotState = { dates: [...dateSet].sort(), names, daily };
+  drawPivot();
+}
+function drawPivot() {
+  const el = $('agentPivot'); if (!el) return;
+  if (!pivotState || !pivotState.names.length || !pivotState.dates.length) {
+    el.innerHTML = '<div class="empty">표시할 데이터가 없습니다</div>'; return;
+  }
+  const { dates, names, daily } = pivotState;
+  const meta = PIVOT_META[pivotMetric];
+  const stick = 'position:sticky;left:0;background:var(--surface);z-index:1;';
+  let html = '<table class="list" style="min-width:' + (110 + dates.length * 46) + 'px;"><tr>' +
+    '<th style="text-align:left;' + stick + '">점검자</th>' +
+    dates.map(d => '<th style="text-align:right;white-space:nowrap;">' + d.slice(5).replace('-', '/') + '</th>').join('') + '</tr>' +
+    names.map(n => {
+      const dm = daily.get(n);
+      return '<tr' + (n === agentSel ? ' class="sel"' : '') + '><td style="' + stick + 'font-weight:600;white-space:nowrap;">' + esc(n) + '</td>' +
+        dates.map(d => {
+          const a = dm && dm.get(d);
+          const v = a ? meta.val(a) : null;
+          return '<td class="num" style="text-align:right;">' + (v == null ? '<span style="color:var(--grid);">·</span>' : meta.fmt(v)) + '</td>';
+        }).join('') + '</tr>';
+    }).join('') + '</table>';
+  el.innerHTML = html;
+}
+
 function renderAgentsPage() {
   const months = [...new Set(DATA.seed.map(r => r.date.slice(0, 7)))].sort().reverse();
   const sel = $('agentYm');
@@ -1354,6 +1428,7 @@ function renderAgents() {
     { color: 'var(--s2)', unit: '%', fmtFn: v => fmt1(v) + '%', showPct: false });
   hbar('chAgM2', sel.filter(a => a.m2 != null).sort((a, b) => b.m2 - a.m2).map(a => ({ label: a.name, value: a.m2 })),
     { color: 'var(--s8)', unit: '%', fmtFn: v => fmt1(v) + '%', showPct: false });
+  renderAgentPivot(span, sel.map(a => a.name));
 
   // 상세 분석 점검자 셀렉트
   if (!agentSel || !names.includes(agentSel)) agentSel = (sel[0] || stats[0]).name;
@@ -2634,6 +2709,11 @@ document.querySelectorAll('.dgranBtn').forEach(btn => btn.addEventListener('clic
   detailGran = btn.dataset.g;
   document.querySelectorAll('.dgranBtn').forEach(b => b.classList.toggle('on', b === btn));
   renderAgentDetail();
+}));
+document.querySelectorAll('.pivotBtn').forEach(btn => btn.addEventListener('click', () => {
+  pivotMetric = btn.dataset.p;
+  document.querySelectorAll('.pivotBtn').forEach(b => b.classList.toggle('on', b === btn));
+  drawPivot();
 }));
 $('dApply').addEventListener('click', () => {
   const f = $('dFrom').value, t = $('dTo').value;
