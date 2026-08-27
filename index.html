@@ -562,6 +562,13 @@ const RAW_LINK_TABS = [
 
 /* ---------- 유틸 ---------- */
 const $ = id => document.getElementById(id);
+// 날짜 입력 필드는 달력 아이콘뿐 아니라 필드 전체(텍스트 영역) 클릭으로도 달력이 열리도록 함
+document.addEventListener('click', e => {
+  const t = e.target;
+  if (t.tagName === 'INPUT' && t.type === 'date' && typeof t.showPicker === 'function') {
+    try { t.showPicker(); } catch (err) {}
+  }
+});
 const avgOf = arr => { const v = arr.filter(x => x != null && !isNaN(x)); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null; };
 const fmt = n => (n == null || isNaN(n)) ? '-' : Math.round(n).toLocaleString('ko-KR');
 const fmt1 = n => (n == null || isNaN(n)) ? '-' : (Math.round(n * 10) / 10).toLocaleString('ko-KR', { minimumFractionDigits: 1 });
