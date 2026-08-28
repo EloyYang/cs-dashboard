@@ -53,8 +53,12 @@ table.list tr.agrow.sel td{background:var(--accent-soft); font-weight:600;}
 .sfld{font-size:11.5px; color:var(--muted); display:inline-block;}
 .sfld input, .sfld select{margin-top:3px;}
 table.list tr.srow{cursor:pointer;}
-table.list tr.srow:hover td{background:var(--accent-soft);}
-table.list tr.srow.sel td{background:var(--accent-soft);}
+table.list tr.srow td{border-bottom:none;}
+table.list tr.srow:hover td, table.list tr.srow:hover + tr.sreq-row td{background:var(--accent-soft);}
+table.list tr.srow.sel td, table.list tr.srow.sel + tr.sreq-row td{background:var(--accent-soft);}
+table.list tr.sreq-row td{border-bottom:1px solid var(--grid); padding:0 10px 8px 0;}
+table.list tr.sreq-row .slabel{color:var(--muted); font-size:11.5px; margin-right:6px;}
+table.list tr.sreq-row .stext{white-space:pre-wrap; word-break:break-word;}
 
 main{max-width:1240px; margin:0 auto 0 var(--sidebar-w); padding:16px 20px 60px;}
 section{margin-top:28px;}
@@ -1810,34 +1814,29 @@ function runSearch() {
   searchRows = rows.slice(0, 300);
   $('sCount').textContent = '— ' + fmt(rows.length) + '건' + (rows.length > 300 ? ' (최신 300건 표시)' : '');
   if (!searchRows.length) { $('sResults').innerHTML = '<div class="empty">조건에 맞는 데이터가 없습니다</div>'; return; }
-  // 검색어가 잘려나간 뒤쪽에 있으면 그 부분이 보이도록 표시 구간을 옮긴다
-  const clip = (s, n) => {
-    s = s || '';
-    if (!s) return '';
-    let start = 0;
-    if (searchQ) { const p = s.toLowerCase().indexOf(searchQ); if (p >= n) start = p - Math.floor(n / 3); }
-    const head = start > 0 ? '…' : '';
-    const tail = start + n < s.length ? '…' : '';
-    return head + escHl(s.slice(start, start + n), searchQ) + tail;
-  };
   const hl = s => escHl(s || '', searchQ);
   $('sResults').innerHTML =
     '<table class="list" style="min-width:1200px;"><tr><th>접수일</th><th>시간</th><th>점검자</th><th>처리결과</th><th>MSO</th><th>SO</th>' +
-    '<th>레포트번호</th><th>리뷰점수</th><th>상담사</th><th>요청내용(정산용)</th><th>처리결과(정산용)</th></tr>' +
+    '<th>레포트번호</th><th>리뷰점수</th><th>상담사</th></tr>' +
     searchRows.map((r, i) => {
       const sj = DATA.sjMap.get(r.rpt) || {};
+      const colN = 9;
       return '<tr class="srow" data-i="' + i + '"><td class="num">' + hl(r.date) + '</td><td class="num">' + hl(r.time) + '</td>' +
         '<td>' + hl(r.agent) + '</td><td>' + hl(r.result) + '</td><td>' + hl(r.mso) + '</td><td>' + hl(r.soG) + '</td>' +
         '<td class="num" style="font-size:11.5px;">' + hl(r.rpt) + '</td>' +
-        '<td class="num">' + (r.score != null ? r.score : '-') + '</td><td>' + (sj.counselor ? hl(sj.counselor) : '-') + '</td>' +
-        '<td title="' + esc(sj.req || '') + '">' + (clip(sj.req, 28) || '-') + '</td>' +
-        '<td title="' + esc(sj.resultJ || '') + '">' + (clip(sj.resultJ, 22) || '-') + '</td></tr>';
+        '<td class="num">' + (r.score != null ? r.score : '-') + '</td><td>' + (sj.counselor ? hl(sj.counselor) : '-') + '</td></tr>' +
+        '<tr class="sreq-row" data-i="' + i + '"><td colspan="' + colN + '">' +
+        '<div style="display:flex;gap:24px;flex-wrap:wrap;font-size:12.5px;">' +
+        '<div style="flex:2;min-width:260px;"><span class="slabel">요청내용(정산용)</span><span class="stext">' + (sj.req ? escHl(sj.req, searchQ) : '-') + '</span></div>' +
+        '<div style="flex:1;min-width:160px;"><span class="slabel">처리결과(정산용)</span><span class="stext">' + (sj.resultJ ? escHl(sj.resultJ, searchQ) : '-') + '</span></div>' +
+        '</div></td></tr>';
     }).join('') + '</table>';
   document.querySelectorAll('#sResults .srow').forEach(tr => tr.addEventListener('click', () => toggleSearchDetail(tr)));
 }
-/* 클릭한 행 바로 아래에 상세를 펼침(다시 클릭 시 접기) */
+/* 클릭한 행(+그 아래 요청내용 행) 다음에 상세를 펼침(다시 클릭 시 접기) */
 function toggleSearchDetail(tr) {
-  const next = tr.nextElementSibling;
+  const subRow = tr.nextElementSibling; // 항상 표시되는 요청내용(정산용)/처리결과(정산용) 행
+  const next = subRow && subRow.nextElementSibling;
   const already = next && next.classList.contains('sdetail-row');
   // 열려 있던 다른 상세 행 제거
   document.querySelectorAll('#sResults .sdetail-row').forEach(el => el.remove());
@@ -1848,7 +1847,7 @@ function toggleSearchDetail(tr) {
   const detail = document.createElement('tr');
   detail.className = 'sdetail-row';
   detail.innerHTML = '<td colspan="' + colspan + '" style="padding:0;background:var(--page);">' + searchDetailHtml(+tr.dataset.i) + '</td>';
-  tr.after(detail);
+  (subRow || tr).after(detail);
 }
 function searchDetailHtml(i) {
   const r = searchRows[i];
