@@ -56,9 +56,10 @@ table.list tr.srow{cursor:pointer;}
 table.list tr.srow td{border-bottom:none;}
 table.list tr.srow:hover td, table.list tr.srow:hover + tr.sreq-row td{background:var(--accent-soft);}
 table.list tr.srow.sel td, table.list tr.srow.sel + tr.sreq-row td{background:var(--accent-soft);}
-table.list tr.sreq-row td{border-bottom:1px solid var(--grid); padding:0 10px 8px 0;}
-table.list tr.sreq-row .slabel{color:var(--muted); font-size:11.5px; margin-right:6px;}
-table.list tr.sreq-row .stext{white-space:pre-wrap; word-break:break-word;}
+table.list tr.sreq-row td{border-bottom:1px solid var(--grid); padding:0 10px 10px 0;}
+table.list tr.sreq-row .sreq-tbl{width:100%; border-collapse:collapse; border:1px solid var(--border); font-size:12.5px;}
+table.list tr.sreq-row .sreq-tbl th{width:130px; white-space:nowrap; text-align:left; font-weight:600; color:var(--muted); padding:6px 10px; border:1px solid var(--border); vertical-align:top;}
+table.list tr.sreq-row .sreq-tbl td{padding:6px 10px; border:1px solid var(--border); white-space:pre-wrap; word-break:break-word; vertical-align:top;}
 
 main{max-width:1240px; margin:0 auto 0 var(--sidebar-w); padding:16px 20px 60px;}
 section{margin-top:28px;}
@@ -1826,10 +1827,9 @@ function runSearch() {
         '<td class="num" style="font-size:11.5px;">' + hl(r.rpt) + '</td>' +
         '<td class="num">' + (r.score != null ? r.score : '-') + '</td><td>' + (sj.counselor ? hl(sj.counselor) : '-') + '</td></tr>' +
         '<tr class="sreq-row" data-i="' + i + '"><td colspan="' + colN + '">' +
-        '<div style="display:flex;gap:24px;flex-wrap:wrap;font-size:12.5px;">' +
-        '<div style="flex:2;min-width:260px;"><span class="slabel">요청내용(정산용)</span><span class="stext">' + (sj.req ? escHl(sj.req, searchQ) : '-') + '</span></div>' +
-        '<div style="flex:1;min-width:160px;"><span class="slabel">처리결과(정산용)</span><span class="stext">' + (sj.resultJ ? escHl(sj.resultJ, searchQ) : '-') + '</span></div>' +
-        '</div></td></tr>';
+        '<table class="sreq-tbl"><tr><th>요청내용(정산용)</th><td>' + (sj.req ? escHl(sj.req, searchQ) : '-') + '</td></tr>' +
+        '<tr><th>처리결과(정산용)</th><td>' + (sj.resultJ ? escHl(sj.resultJ, searchQ) : '-') + '</td></tr></table>' +
+        '</td></tr>';
     }).join('') + '</table>';
   document.querySelectorAll('#sResults .srow').forEach(tr => tr.addEventListener('click', () => toggleSearchDetail(tr)));
 }
