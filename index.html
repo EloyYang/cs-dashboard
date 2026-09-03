@@ -60,6 +60,8 @@ table.list tr.sreq-row td{border-bottom:1px solid var(--grid); padding:0 10px 10
 table.list tr.sreq-row .sreq-tbl{width:100%; border-collapse:collapse; border:1px solid var(--border); font-size:12.5px;}
 table.list tr.sreq-row .sreq-tbl th{width:130px; white-space:nowrap; text-align:left; font-weight:600; color:var(--muted); padding:6px 10px; border:1px solid var(--border); vertical-align:top;}
 table.list tr.sreq-row .sreq-tbl td{padding:6px 10px; border:1px solid var(--border); white-space:pre-wrap; word-break:break-word; vertical-align:top;}
+table.list tr.kdrow{cursor:pointer;}
+table.list tr.kdrow:hover td, table.list tr.kdrow.sel td{background:var(--accent-soft);}
 
 main{max-width:1240px; margin:0 auto 0 var(--sidebar-w); padding:16px 20px 60px;}
 section{margin-top:28px;}
@@ -1094,11 +1096,29 @@ function renderKpiDetail() {
   if (!cfg) { el.innerHTML = ''; return; }
   const rows = kpiDetailRows[kpiDetailOpen] || [];
   el.innerHTML = '<div class="card"><h3>' + cfg.title +
-    ' <span style="font-weight:400;color:var(--muted);font-size:12.5px;">— ' + fmt(rows.length) + '건 · 최신순 최대 100건</span>' +
+    ' <span style="font-weight:400;color:var(--muted);font-size:12.5px;">— ' + fmt(rows.length) + '건 · 최신순 최대 100건 · 행을 클릭하면 상세가 펼쳐집니다</span>' +
     ' <a href="#" onclick="toggleKpiDetail(null);return false;" style="float:right;font-size:12px;">닫기 ✕</a></h3>' +
     '<div style="overflow-x:auto;max-height:420px;overflow-y:auto;"><table class="list"><tr><th style="width:90px;">접수일</th><th>SO (B열)</th><th>점검자 (D열)</th><th>레포트번호</th>' + cfg.head + '</tr>' +
-    rows.slice(0, 100).map(r => '<tr><td class="num">' + r.date + '</td><td>' + esc(r.so) + '</td><td>' + esc(r.agent) + '</td><td class="num" style="font-size:11.5px;">' + esc(r.rpt || '-') + '</td>' + cfg.cell(r) + '</tr>').join('') +
+    rows.slice(0, 100).map((r, i) => '<tr class="kdrow" data-i="' + i + '"><td class="num">' + r.date + '</td><td>' + esc(r.so) + '</td><td>' + esc(r.agent) + '</td><td class="num" style="font-size:11.5px;">' + esc(r.rpt || '-') + '</td>' + cfg.cell(r) + '</tr>').join('') +
     '</table></div></div>';
+  document.querySelectorAll('#kpiDetail .kdrow').forEach(tr => tr.addEventListener('click', () => toggleKpiRowDetail(tr)));
+}
+/* 클릭한 행 바로 아래에 상세(요청내용·리뷰 등)를 펼침(다시 클릭 시 접기) — 검색 탭과 동일한 상세 패널 재사용 */
+function toggleKpiRowDetail(tr) {
+  const next = tr.nextElementSibling;
+  const already = next && next.classList.contains('kdetail-row');
+  document.querySelectorAll('#kpiDetail .kdetail-row').forEach(el => el.remove());
+  document.querySelectorAll('#kpiDetail .kdrow').forEach(t => t.classList.remove('sel'));
+  if (already) return;
+  tr.classList.add('sel');
+  const r = (kpiDetailRows[kpiDetailOpen] || [])[+tr.dataset.i];
+  if (!r) return;
+  const colspan = tr.children.length;
+  const detail = document.createElement('tr');
+  detail.className = 'kdetail-row';
+  detail.innerHTML = '<td colspan="' + colspan + '" style="padding:0;background:var(--page);">' +
+    recordDetailHtml(r, '', '📄 상세 — ' + esc(r.rpt || '(레포트번호 없음)')) + '</td>';
+  tr.after(detail);
 }
 
 /* ---------- 전체 렌더 ---------- */
@@ -1858,23 +1878,29 @@ function toggleSearchDetail(tr) {
   detail.innerHTML = '<td colspan="' + colspan + '" style="padding:0;background:var(--page);">' + searchDetailHtml(+tr.dataset.i) + '</td>';
   (subRow || tr).after(detail);
 }
+/* 레코드(seed 행) 하나의 상세 패널 — 검색 탭·KPI 상세 목록에서 공통으로 씀 */
+function fldRow(k, v, q) { return '<tr><th style="width:110px;white-space:nowrap;">' + k + '</th><td>' + (v ? escHl(v, q || '') : '-') + '</td></tr>'; }
+function recordDetailHtml(r, q, titleHtml) {
+  if (!r) return '';
+  q = q || '';
+  const sj = DATA.sjMap.get(r.rpt) || {};
+  return '<div style="padding:14px 16px;border-top:2px solid var(--accent);"><h3 style="font-size:13.5px;margin-bottom:8px;">' + titleHtml + '</h3>' +
+    '<div class="grid c2"><div><table class="list">' +
+    fldRow('접수일시', r.date + ' ' + (r.time || ''), q) + fldRow('점검자명', r.agent, q) + fldRow('처리결과', r.result, q) +
+    fldRow('MSO / SO', r.mso + ' / ' + r.so, q) +
+    fldRow('리뷰점수', r.score != null ? r.score + '점' : (sj.score != null ? sj.score + '점' : '리뷰없음'), q) +
+    '</table></div><div><table class="list">' +
+    fldRow('상담사', sj.counselor, q) + fldRow('센터명', sj.center, q) + fldRow('소속팀', sj.team, q) + fldRow('사용상품', sj.product, q) +
+    fldRow('처리결과(정산용)', sj.resultJ, q) +
+    fldRow('리뷰내용', sj.rtext && sj.rtext !== '리뷰없음' ? sj.rtext : '-', q) +
+    '</table></div></div>' +
+    '<div style="margin-top:10px;"><div style="font-size:12px;color:var(--muted);margin-bottom:4px;">요청내용 (seed(정산용))</div>' +
+    '<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-size:13px;white-space:pre-wrap;">' + (sj.req ? escHl(sj.req, q) : '- 정산용 데이터에 없는 건입니다 -') + '</div></div></div>';
+}
 function searchDetailHtml(i) {
   const r = searchRows[i];
   if (!r) return '';
-  const sj = DATA.sjMap.get(r.rpt) || {};
-  const fld = (k, v) => '<tr><th style="width:110px;white-space:nowrap;">' + k + '</th><td>' + (v ? escHl(v, searchQ) : '-') + '</td></tr>';
-  return '<div style="padding:14px 16px;border-top:2px solid var(--accent);"><h3 style="font-size:13.5px;margin-bottom:8px;">📄 상세 — ' + escHl(r.rpt || '(레포트번호 없음)', searchQ) + '</h3>' +
-    '<div class="grid c2"><div><table class="list">' +
-    fld('접수일시', r.date + ' ' + (r.time || '')) + fld('점검자명', r.agent) + fld('처리결과', r.result) +
-    fld('MSO / SO', r.mso + ' / ' + r.so) +
-    fld('리뷰점수', r.score != null ? r.score + '점' : (sj.score != null ? sj.score + '점' : '리뷰없음')) +
-    '</table></div><div><table class="list">' +
-    fld('상담사', sj.counselor) + fld('센터명', sj.center) + fld('소속팀', sj.team) + fld('사용상품', sj.product) +
-    fld('처리결과(정산용)', sj.resultJ) +
-    fld('리뷰내용', sj.rtext && sj.rtext !== '리뷰없음' ? sj.rtext : '-') +
-    '</table></div></div>' +
-    '<div style="margin-top:10px;"><div style="font-size:12px;color:var(--muted);margin-bottom:4px;">요청내용 (seed(정산용))</div>' +
-    '<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-size:13px;white-space:pre-wrap;">' + (sj.req ? escHl(sj.req, searchQ) : '- 정산용 데이터에 없는 건입니다 -') + '</div></div></div>';
+  return recordDetailHtml(r, searchQ, '📄 상세 — ' + escHl(r.rpt || '(레포트번호 없음)', searchQ));
 }
 
 /* ---------- 타스트 추출 (업로드한 EPS 목록 엑셀에서 · SO=LGU+ · 처리결과=A/S 접수) ---------- */
