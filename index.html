@@ -363,7 +363,7 @@ table.ilbo-tbl tr.ilbo-gap td{border:none; padding:6px 0;}
 <div class="page" id="page-agents" hidden>
   <section>
     <h2>점검자 분석</h2>
-    <div class="sub">점검량 = seed(인정 O) + remote(2차) + 컴퓨터주치의 + 실시간원격주치의 · 리뷰점수·선택동의율은 운영 산식 기준</div>
+    <div class="sub">점검량 = seed(인정 O) + remote(2차) + 컴퓨터주치의 + 실시간원격주치의 · 리뷰점수·선택동의율은 운영 산식 기준 · 시간당 처리량 = 점검량 ÷ 순 근무시간(인센티브시트 현황 근무시간 − 타업무 − 연차·반차 추정)</div>
     <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap;">
       <span style="color:var(--muted);font-size:12.5px;">조회</span>
       <button class="chip agModeBtn on" data-m="month">월별</button>
@@ -542,6 +542,8 @@ const SHEET_URL = 'https://docs.google.com/spreadsheets/d/' + SHEET_ID;
 /* 근태특이사항은 별도 스프레드시트에 있어 따로 조회한다 (기록 1건 = 근태 -1점) */
 const ATTEND_SHEET_ID = '1vTbo9dvdGezOPJgCZuSWiFgC51oK_tnzi4rH-0wa_h0';
 const ATTEND_TAB = { title: '근태특이사항', range: "'근태특이사항'!A:Z", label: '근태특이사항' };
+/* 타업무(업무 중 특정 시간만 빠지는 기록) — 시간당 처리량 계산 시 근무시간에서 차감 */
+const OFFDUTY_TAB = { title: '타업무', range: "'타업무'!A:Z", label: '타업무' };
 const ATTEND_URL = 'https://docs.google.com/spreadsheets/d/' + ATTEND_SHEET_ID;
 document.getElementById('lnkSheet').href = SHEET_URL + '/edit';
 
@@ -559,6 +561,7 @@ const RAW_TABS = {
   realtime: { title: '실시간원격주치의',   range: "'실시간원격주치의'!A:N",   label: '실시간원격주치의' },
   computer: { title: '컴퓨터주치의',      range: "'컴퓨터주치의'!A:I",       label: '컴퓨터주치의' },
   remote:   { title: 'remote',          range: "'remote'!A:Z",          label: 'remote' },
+  workhours:{ title: '현황',            range: "'현황'!C10:G19",         label: '현황(근무시간)' },
 };
 /* gid → 시트 제목 (보고서 탭 등 제목 기반 API 조회용) */
 const TAB_TITLE = {
@@ -693,9 +696,11 @@ function colIdx(header, name, fallback) {
 }
 
 /* ---------- 데이터 저장소 ---------- */
-const DATA = { seed: [], review: [], jochi: [], realtime: [], computer: [], remote: [], sjMap: new Map(), attend: [] };
+const DATA = { seed: [], review: [], jochi: [], realtime: [], computer: [], remote: [], sjMap: new Map(), attend: [], workhours: new Map(), offduty: [] };
 let attendLoaded = false;   // 근태특이사항 시트를 실제로 읽었는지 (못 읽으면 근태를 '-'로 표시)
 let attendCols = null;      // 자동 인식한 {name, date} 열 이름 — 화면에 표기해 확인할 수 있게 한다
+let offdutyLoaded = false;  // 타업무 시트를 실제로 읽었는지
+let offdutyCols = null;     // 자동 인식한 {name, date, hour} 열 이름
 
 /* 헤더 후보 중 먼저 맞는 열 (정확히 일치 → 부분 일치 순). 없으면 fallback */
 function colIdxAny(header, names, fallback) {
@@ -708,6 +713,17 @@ const colName = i => { let s = ''; for (i++; i > 0; i = Math.floor((i - 1) / 26)
 
 function normalize(key, rows) {
   if (!rows.length) { DATA[key] = []; return; }
+  // 현황!C10:G19 — 헤더 없는 고정 범위(이름 열 C=idx0, 근무시간 열 G=idx4)라 별도 처리
+  if (key === 'workhours') {
+    const map = new Map();
+    for (const r of rows) {
+      const name = String(r[0] ?? '').trim();
+      const hrs = parseFloat(String(r[4] ?? '').replace(/,/g, ''));
+      if (name && !isNaN(hrs)) map.set(name, hrs);
+    }
+    DATA.workhours = map;
+    return;
+  }
   const H = rows[0].map(h => String(h || ''));
   const body = rows.slice(1);
   const out = [];
@@ -766,6 +782,18 @@ function normalize(key, rows) {
       const date = parseDateStr(S(r, iDate)), name = S(r, iName);
       if (!date || !name) continue;   // 헤더·빈 행·합계 행 등은 자연히 걸러진다
       out.push({ name, date, part: S(r, iPart), detail: S(r, iDetail) });
+    }
+  } else if (key === 'offduty') {
+    // 타업무(업무 중 특정 시간만 빠지는 기록): 날짜·이름·시간(제외시간) 열을 헤더로 자동 인식
+    const iDate = colIdxAny(H, ['날짜', '일자'], 0);
+    const iName = colIdxAny(H, ['이름', '성명', '점검자명', '점검자'], 1);
+    const iHour = colIdxAny(H, ['시간'], 2); // 제외시간·차감시간·타업무시간 등 '시간'을 포함하는 첫 열
+    offdutyCols = { name: H[iName] || ('열 ' + colName(iName)), date: H[iDate] || ('열 ' + colName(iDate)), hour: H[iHour] || ('열 ' + colName(iHour)) };
+    for (const r of body) {
+      const date = parseDateStr(S(r, iDate)), name = S(r, iName);
+      const hrs = parseFloat(S(r, iHour).replace(/,/g, ''));
+      if (!date || !name || isNaN(hrs)) continue;
+      out.push({ date, name, hours: hrs });
     }
   } else if (key === 'realtime') {
     const iDate = colIdx(H, '처리일자', 7), iContent = colIdx(H, '처리내용', 1), iTeam = colIdx(H, '소속', 13), iAgent = colIdx(H, '처리자', 5);
@@ -1240,6 +1268,46 @@ function setDetailDefaultRange() {
 }
 const AGENT_EXCLUDE = /취소|없음|^APP|미배정|테스트|^양동영$|^이현정$/i; // 양동영·이현정은 점검자 분석에서 집계 제외
 
+/* 시간당 처리량용 순 근무시간 계산
+   순 근무시간 = 현황!G10:G19 총 근무시간 − 기간 내 타업무 시간 − 연차/반차 추정 차감
+   연차/반차는 근태특이사항·타업무에 기록이 없는 결근을 잡기 위한 보정치임 — 평일 중 처리완료
+   (원격 완료·전화 완료·점검완료) 건이 있었던 서로 다른 시간대(시) 수가 0이면 연차(-8h), 4시간
+   미만이면 반차(-4h)로 추정한다. 주말은 집계에서 제외. */
+function computeWorkHourStats(names, from, to) {
+  const offMap = new Map();
+  for (const r of DATA.offduty) {
+    if (r.date < from || r.date > to || !names.has(r.name)) continue;
+    offMap.set(r.name, (offMap.get(r.name) || 0) + r.hours);
+  }
+  const isDone = r => r.result === '원격 완료' || r.result === '전화 완료' || r.result === '점검완료';
+  const actMap = new Map(); // name → Map(date → Set(hour))
+  for (const r of DATA.seed) {
+    if (r.date < from || r.date > to || !names.has(r.agent) || r.hour == null || !isDone(r)) continue;
+    let dm = actMap.get(r.agent); if (!dm) { dm = new Map(); actMap.set(r.agent, dm); }
+    let hs = dm.get(r.date); if (!hs) { hs = new Set(); dm.set(r.date, hs); }
+    hs.add(r.hour);
+  }
+  const result = new Map();
+  for (const name of names) {
+    const gross = DATA.workhours.get(name);
+    if (gross == null) { result.set(name, null); continue; }
+    const offduty = offMap.get(name) || 0;
+    const dm = actMap.get(name);
+    let leaveDeduct = 0, leaveDays = 0, halfDays = 0;
+    for (let d = dsToDate(from); d <= dsToDate(to); d = addDays(d, 1)) {
+      const dow = d.getDay();
+      if (dow === 0 || dow === 6) continue; // 주말 제외
+      const hs = dm && dm.get(dateToDs(d));
+      const cnt = hs ? hs.size : 0;
+      if (cnt === 0) { leaveDeduct += 8; leaveDays++; }
+      else if (cnt < 4) { leaveDeduct += 4; halfDays++; }
+    }
+    const net = gross - offduty - leaveDeduct;
+    result.set(name, { gross, offduty, leaveDeduct, leaveDays, halfDays, net: net > 0 ? net : null });
+  }
+  return result;
+}
+
 function computeAgentStats(from, to) {
   const inR = ds => !!ds && ds >= from && ds <= to;
   const seedM = DATA.seed.filter(r => inR(r.date));
@@ -1255,6 +1323,7 @@ function computeAgentStats(from, to) {
   // 수동처리율 대상 처리결과: '점검완료'·'A/S 접수' (공백/슬래시 무시하고 비교)
   const rn = s => (s || '').replace(/[\s/]/g, '').toUpperCase();
   const MAN_TARGET = new Set(['점검완료', 'AS접수']);
+  const whStats = computeWorkHourStats(names, from, to);
   const out = [];
   for (const name of names) {
     const sCnt = seedM.filter(r => r.agent === name && r.af === 'O').length;
@@ -1281,7 +1350,14 @@ function computeAgentStats(from, to) {
     const manBase = seedM.filter(r => r.agent === name && MAN_TARGET.has(rn(r.result)));
     const manD = manBase.length;
     const manN = manBase.filter(r => (r.al || '').trim() === '수동').length;
-    out.push({ name, vol: sCnt + rCnt + cCnt + tCnt, sCnt, rCnt, cCnt, tCnt, score, nScored, nDone: done.length, consent: cd ? cn / cd * 100 : null, cn, cd, m2: m2d ? m2n / m2d * 100 : null, m2n, m2d, manual: manD ? manN / manD * 100 : null, manN, manD });
+    const vol = sCnt + rCnt + cCnt + tCnt;
+    const wh = whStats.get(name); // 시간당 처리량 = 점검량 ÷ 순 근무시간(현황 시트 근무시간 − 타업무 − 연차/반차 추정)
+    out.push({
+      name, vol, sCnt, rCnt, cCnt, tCnt, score, nScored, nDone: done.length, consent: cd ? cn / cd * 100 : null, cn, cd,
+      m2: m2d ? m2n / m2d * 100 : null, m2n, m2d, manual: manD ? manN / manD * 100 : null, manN, manD,
+      perHour: wh && wh.net ? vol / wh.net : null, whGross: wh ? wh.gross : null, whNet: wh ? wh.net : null,
+      whOffduty: wh ? wh.offduty : 0, whLeaveDays: wh ? wh.leaveDays : 0, whHalfDays: wh ? wh.halfDays : 0,
+    });
   }
   return out.filter(a => a.vol > 0).sort((a, b) => b.vol - a.vol);
 }
@@ -1435,15 +1511,20 @@ function renderAgents() {
     '<th style="width:34px;"><input type="checkbox" id="agChkAll"' + (allChecked ? ' checked' : '') + ' title="전체 선택/해제"></th>' +
     '<th>점검자</th><th style="text-align:right;">점검량</th>' +
     '<th style="text-align:right;">seed</th><th style="text-align:right;">remote</th><th style="text-align:right;">컴퓨터주치의</th><th style="text-align:right;">실시간원격</th>' +
+    '<th style="text-align:right;">시간당 처리량</th><th style="text-align:right;">순 근무시간</th>' +
     '<th style="text-align:right;">리뷰점수</th><th style="text-align:right;">리뷰 응답</th><th style="text-align:right;">선택동의율</th><th style="text-align:right;">동의/대상</th>' +
     '<th style="text-align:right;">M2설치율</th><th style="text-align:right;">설치/완료</th></tr>' +
     stats.map(a => {
       const p = prevMap.get(a.name) || {};
+      const whTitle = a.whGross != null
+        ? ' title="총 근무시간 ' + fmt1(a.whGross) + 'h − 타업무 ' + fmt1(a.whOffduty) + 'h − 연차 추정 ' + a.whLeaveDays + '일 − 반차 추정 ' + a.whHalfDays + '일"' : '';
       return '<tr class="agrow' + (a.name === agentSel ? ' sel' : '') + '" data-name="' + esc(a.name) + '">' +
       '<td><input type="checkbox" class="agchk" data-name="' + esc(a.name) + '"' + (agentChecked.has(a.name) ? ' checked' : '') + '></td>' +
       '<td>' + esc(a.name) + '</td>' + deltaTd(a.vol, p.vol, fmt, '') +
       '<td class="num" style="text-align:right;">' + fmt(a.sCnt) + '</td><td class="num" style="text-align:right;">' + fmt(a.rCnt) + '</td>' +
       '<td class="num" style="text-align:right;">' + fmt(a.cCnt) + '</td><td class="num" style="text-align:right;">' + fmt(a.tCnt) + '</td>' +
+      deltaTd(a.perHour, p.perHour, fmt1, '건/h') +
+      '<td class="num"' + whTitle + ' style="text-align:right;">' + (a.whNet != null ? fmt1(a.whNet) + 'h' : '-') + '</td>' +
       deltaTd(a.score, p.score, fmt1, '') +
       '<td class="num" style="text-align:right;">' + fmt(a.nScored) + '/' + fmt(a.nDone) + '</td>' +
       deltaTd(a.consent, p.consent, fmt1, '%') +
@@ -1451,7 +1532,8 @@ function renderAgents() {
       deltaTd(a.m2, p.m2, fmt1, '%') +
       '<td class="num" style="text-align:right;">' + fmt(a.m2n) + '/' + fmt(a.m2d) + '</td></tr>';
     }).join('') + '</table></div>' +
-    '<div class="legend-note">※ 점검량·리뷰점수·선택동의율·M2설치율 값의 <b>색상·화살표는 ' + prevLabel + ' 대비</b> — <span style="color:var(--s4);font-weight:700;">▲ 상승</span> · <span style="color:var(--bad);font-weight:700;">▼ 하락</span> · ±0 변화없음 · 신규=이전 데이터 없음. 셀에 마우스를 올리면 이전 값이 표시됩니다.</div>';
+    '<div class="legend-note">※ 점검량·시간당 처리량·리뷰점수·선택동의율·M2설치율 값의 <b>색상·화살표는 ' + prevLabel + ' 대비</b> — <span style="color:var(--s4);font-weight:700;">▲ 상승</span> · <span style="color:var(--bad);font-weight:700;">▼ 하락</span> · ±0 변화없음 · 신규=이전 데이터 없음. 셀에 마우스를 올리면 이전 값이 표시됩니다. ' +
+    '<b>시간당 처리량</b> = 점검량 ÷ 순 근무시간(현황 시트 근무시간 − 기간 내 타업무 − 연차·반차 추정 차감, 순 근무시간 칸에 마우스를 올리면 계산 내역이 표시됩니다). 현황 시트에 이름이 없으면 「-」로 표시됩니다.</div>';
   document.querySelectorAll('#agentTable .agrow').forEach(tr =>
     tr.addEventListener('click', ev => {
       if (ev.target.classList.contains('agchk')) return;
@@ -1690,11 +1772,15 @@ function renderAgentDetail() {
       { label: '근태', mine: attMine, avg: attAvg, f: v => v === 0 ? '0' : '-' + (Number.isInteger(v) ? fmt(v) : fmt1(v)), unit: '점', invert: true, ratio: ratioDown(attMine, attAvg) },
     ];
     radarChart('chDRadar', axes, agentSel);
-    // 수동처리율 = 처리결과 「점검완료·A/S접수」 중 AL='수동' 비율 (우열 방향 불명확 → 참고 지표로 표에만, 레이더 제외)
+    // 수동처리율·시간당 처리량은 레이더 모양(축 개수)에 영향 주지 않도록 표에만 참고 지표로 추가
     const manualAvg = avgOf(allStats.map(a => a.manual));
+    const perHourAvg = avgOf(allStats.map(a => a.perHour));
     const tableRows = axes.concat([{
       label: '수동처리율', mine: meRow.manual, avg: manualAvg, f: fmt1, unit: '%', neutral: true,
       ratio: (meRow.manual != null && manualAvg) ? meRow.manual / manualAvg * 100 : null,
+    }, {
+      label: '시간당 처리량', mine: meRow.perHour, avg: perHourAvg, f: fmt1, unit: '건/h', neutral: true,
+      ratio: (meRow.perHour != null && perHourAvg) ? meRow.perHour / perHourAvg * 100 : null,
     }]);
     $('dRadarTable').innerHTML = '<table class="list"><tr><th>지표</th><th style="text-align:right;">' + esc(agentSel) + '</th><th style="text-align:right;">전체 평균</th><th style="text-align:right;">평균 대비</th></tr>' +
       tableRows.map(a => {
@@ -1709,7 +1795,9 @@ function renderAgentDetail() {
       }).join('') +
       '</table><div class="legend-note">※ <b>빨간 값 ▼</b> = 평균 대비 100% 미만 (전체 점검자 평균보다 열세). 근태는 <b style="color:var(--muted);">근태특이사항 시트 기록 1건당 -1점</b> (이름·날짜로 매칭, 조회 구간에 드는 기록만) — 특이사항이 없으면 만점으로 표시됩니다' +
       (attendCols ? ' · 인식한 열: ' + esc(attendCols.name) + ' / ' + esc(attendCols.date) : '') +
-      '. <b>수동처리율(참고)</b>은 처리결과 「점검완료·A/S 접수」 중 AL=수동 비율 — 우열 판정 없이 표에만 표시(레이더 제외). 레이더는 나머지 지표를 「밖으로 갈수록 우수」하게 정규화(전체 평균=100%)했습니다. 기준 구간: ' + span.label + ' 전체 점검자.</div>';
+      '. <b>수동처리율(참고)</b>은 처리결과 「점검완료·A/S 접수」 중 AL=수동 비율 · <b>시간당 처리량(참고)</b>은 점검량÷순 근무시간(현황!C10:G19 근무시간 − 타업무 − 연차/반차 추정) — 둘 다 우열 판정 없이 표에만 표시(레이더 제외)' +
+      (offdutyCols ? ' · 타업무 인식한 열: ' + esc(offdutyCols.name) + '/' + esc(offdutyCols.date) + '/' + esc(offdutyCols.hour) : '') +
+      ' · 현황 시트 근무시간 매칭 ' + DATA.workhours.size + '명. 레이더는 나머지 지표를 「밖으로 갈수록 우수」하게 정규화(전체 평균=100%)했습니다. 기준 구간: ' + span.label + ' 전체 점검자.</div>';
   }
   // 3점 미만 리뷰 (선택 점검자 · 선택 기간)
   const lowR = DATA.seed.filter(r => r.agent === agentSel && keySet.has(keyFn(r.date)) && r.score != null && r.score < 3)
@@ -2870,7 +2958,8 @@ async function loadAll() {
   $('errbar').style.display = 'none';
   const keys = Object.keys(RAW_TABS);
   $('loadList').innerHTML = keys.map(k => '<li id="ld-' + k + '">' + RAW_TABS[k].label + ' <span class="st">불러오는 중…</span></li>').join('') +
-    '<li id="ld-attend">' + ATTEND_TAB.label + ' <span class="st">불러오는 중…</span></li>';
+    '<li id="ld-attend">' + ATTEND_TAB.label + ' <span class="st">불러오는 중…</span></li>' +
+    '<li id="ld-offduty">' + OFFDUTY_TAB.label + ' <span class="st">불러오는 중…</span></li>';
   try {
     const ranges = {}; keys.forEach(k => { ranges[k] = RAW_TABS[k].range; });
     const result = await apiBatchGet(ranges);
@@ -2878,7 +2967,7 @@ async function loadAll() {
       normalize(k, result[k] || []);
       const li = $('ld-' + k);
       li.className = 'done';
-      li.querySelector('.st').textContent = '✓ ' + fmt(DATA[k].length) + '건';
+      li.querySelector('.st').textContent = '✓ ' + fmt(DATA[k].size != null ? DATA[k].size : DATA[k].length) + '건';
     });
   } catch (e) {
     keys.forEach(k => { const li = $('ld-' + k); li.className = 'fail'; li.querySelector('.st').textContent = '✗'; });
@@ -2892,10 +2981,12 @@ async function loadAll() {
     $('overlay').style.display = 'none';
     return;
   }
-  // 근태특이사항 (별도 스프레드시트) — 실패해도 나머지 대시보드는 그대로 보여준다
+  // 근태특이사항·타업무 (별도 스프레드시트) — 실패해도 나머지 대시보드는 그대로 보여준다
   attendLoaded = false; attendCols = null;
+  offdutyLoaded = false; offdutyCols = null;
   try {
-    const rows = (await apiBatchGet({ attend: ATTEND_TAB.range }, ATTEND_SHEET_ID)).attend || [];
+    const r2 = await apiBatchGet({ attend: ATTEND_TAB.range, offduty: OFFDUTY_TAB.range }, ATTEND_SHEET_ID);
+    const rows = r2.attend || [];
     normalize('attend', rows);
     const li = $('ld-attend'), st = li.querySelector('.st');
     if (!DATA.attend.length && rows.length > 1) { // 행은 있는데 한 건도 못 읽음 = 열이 어긋난 것
@@ -2907,11 +2998,23 @@ async function loadAll() {
       li.className = 'done';
       st.textContent = '✓ ' + fmt(DATA.attend.length) + '건';
     }
+    const orows = r2.offduty || [];
+    normalize('offduty', orows);
+    const oli = $('ld-offduty'), ost = oli.querySelector('.st');
+    if (!DATA.offduty.length && orows.length > 1) {
+      oli.className = 'fail';
+      ost.textContent = '✗ 기록을 읽지 못함';
+      attendWarn('타업무 시트에서 날짜·이름·시간을 읽지 못해 시간당 처리량이 부정확할 수 있습니다.');
+    } else {
+      offdutyLoaded = true;
+      oli.className = 'done';
+      ost.textContent = '✓ ' + fmt(DATA.offduty.length) + '건';
+    }
   } catch (e) {
-    const li = $('ld-attend');
-    li.className = 'fail';
-    li.querySelector('.st').textContent = '✗';
-    attendWarn('근태특이사항 시트를 불러오지 못해 근태 지표가 «-»로 표시됩니다 — ' + esc(e.message) +
+    const li = $('ld-attend'), oli = $('ld-offduty');
+    li.className = 'fail'; li.querySelector('.st').textContent = '✗';
+    oli.className = 'fail'; oli.querySelector('.st').textContent = '✗';
+    attendWarn('근태특이사항/타업무 시트를 불러오지 못해 근태·시간당 처리량 지표가 부정확할 수 있습니다 — ' + esc(e.message) +
       ' &nbsp;<a href="' + ATTEND_URL + '/edit" target="_blank" rel="noopener">시트 열기 ↗</a>');
   }
   $('updatedAt').textContent = '데이터 기준: ' + new Date().toLocaleString('ko-KR');
