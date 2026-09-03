@@ -616,6 +616,12 @@ function parseNum(s) {
 function dsToDate(ds) { const [y, m, d] = ds.split('-').map(Number); return new Date(y, m - 1, d); }
 function dateToDs(d) { return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()); }
 function addDays(d, n) { const x = new Date(d); x.setDate(x.getDate() + n); return x; }
+/* 모든 기간 필터의 "오늘" 기준 — 실제 오늘 날짜가 아니라 로우데이터(seed)의 가장 최신 인입일을 기준으로 삼는다.
+   (예: 실제 오늘이 9/5여도 seed의 마지막 접수일이 9/2면 필터 기본값은 9/2 기준으로 계산됨) 데이터 로드 전엔 실제 오늘로 대체. */
+function latestSeedDate() {
+  const maxDs = DATA.seed.reduce((m, r) => r.date > m ? r.date : m, '');
+  return maxDs ? dsToDate(maxDs) : new Date();
+}
 function monthLabel(ym) { return ym.slice(2, 4) + '.' + ym.slice(5, 7); }
 function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
 /* 통합 검색어(q, 소문자)와 일치하는 부분을 배경색으로 강조 — q가 없으면 esc()와 동일 */
@@ -790,7 +796,7 @@ function normalize(key, rows) {
 const state = { from: null, to: null, preset: 'month' };
 
 function applyPreset(p) {
-  const today = new Date();
+  const today = latestSeedDate();
   state.preset = p;
   if (p === 'all') { state.from = null; state.to = null; }
   else if (p === 'month') { state.from = dateToDs(new Date(today.getFullYear(), today.getMonth(), 1)); state.to = dateToDs(today); }
@@ -1226,7 +1232,7 @@ function agentSpan() {
 const detailRange = { from: null, to: null };
 /* 상세 분석 기간 기본값: 이번 달 1일 ~ 오늘 (단위 '일' 기준으로 일별 추이가 그려진다) */
 function setDetailDefaultRange() {
-  const today = new Date();
+  const today = latestSeedDate();
   detailRange.from = dateToDs(new Date(today.getFullYear(), today.getMonth(), 1));
   detailRange.to = dateToDs(today);
   $('dFrom').value = detailRange.from;
@@ -1350,7 +1356,7 @@ function renderAgentsPage() {
   sel.innerHTML = months.map(m => '<option value="' + m + '">' + m.replace('-', '년 ') + '월</option>').join('');
   // 기본값은 이번 달 — 이번 달 데이터가 아직 없으면 가장 최근 월로 넘어간다
   if (!agentYm || !months.includes(agentYm)) {
-    const thisYm = dateToDs(new Date()).slice(0, 7);
+    const thisYm = dateToDs(latestSeedDate()).slice(0, 7);
     agentYm = months.includes(thisYm) ? thisYm : months[0];
   }
   sel.value = agentYm;
@@ -1777,7 +1783,7 @@ document.addEventListener('click', () => document.querySelectorAll('.ms.open').f
 let searchInit = false, searchRows = [], searchQ = '';
 /* 검색 탭 기본 기간: 최근 7일 (사용자가 기간을 바꾸기 전까지) */
 function setSearchDefaultRange() {
-  const today = new Date();
+  const today = latestSeedDate();
   $('sTo').value = dateToDs(today);
   $('sFrom').value = dateToDs(addDays(today, -6));
 }
@@ -1905,8 +1911,9 @@ function searchDetailHtml(i) {
 
 /* ---------- 타스트 추출 (업로드한 EPS 목록 엑셀에서 · SO=LGU+ · 처리결과=A/S 접수) ---------- */
 let tastRows = [], tastFileRows = null, tastFileName = '';
-function setTastDefaultRange() { // 완료일자 기본: 어제 하루만 (하루 전 데이터)
-  const y = dateToDs(addDays(new Date(), -1));
+let tastRangeInit = false; // seed 로드 전엔 실제 오늘 기준으로만 임시 계산되므로, 데이터가 준비된 뒤 한 번 더 맞춰준다
+function setTastDefaultRange() { // 완료일자 기본: 어제 하루만 (seed 최신일 기준 하루 전)
+  const y = dateToDs(addDays(latestSeedDate(), -1));
   $('tFrom').value = y;
   $('tTo').value = y;
 }
@@ -2909,10 +2916,13 @@ async function loadAll() {
   }
   $('updatedAt').textContent = '데이터 기준: ' + new Date().toLocaleString('ko-KR');
   setTimeout(() => { $('overlay').style.display = 'none'; }, 300);
-  syncFilterUI();
-  renderAll();
+  // 데이터 로드 전엔 실제 오늘 기준으로 임시 설정됐던 기간 프리셋을 seed 최신일 기준으로 다시 계산
+  // (applyPreset이 내부에서 syncFilterUI·renderAll을 호출하므로 custom일 때만 여기서 직접 호출)
+  if (state.preset !== 'custom') applyPreset(state.preset);
+  else { syncFilterUI(); renderAll(); }
   searchInit = false;
   if (!$('sFrom').value && !$('sTo').value) setSearchDefaultRange(); // 기간 미설정 시 최근 7일
+  if (!tastRangeInit) { tastRangeInit = true; setTastDefaultRange(); } // seed 로드 후 최신일 기준으로 한 번 맞춤(이후 사용자 선택 유지)
   runSearch();
   initInflowControls();
   renderCompare();
