@@ -714,8 +714,8 @@ function normalize(key, rows) {
       out.push({
         mso: S(r, 0) || '기타', so, soG: /^CNM/i.test(so) ? 'CNM' : so, agent: S(r, iAgent), date,
         hour: parseHour(S(r, iTime)), result: S(r, iRes) || '미입력',
-        // 점검자 분석용: J=리뷰점수, U/V=동의, AF=인정, AG=점검유형, AL=제외사유, AM/AN=선택동의 대상, P=설치여부(M2)
-        score: parseNum(S(r, 9)), u: S(r, 20), v: S(r, 21), p: S(r, 15), af: S(r, 31), ag: S(r, 32), al: S(r, 37), am: S(r, 38), an: S(r, 39),
+        // 점검자 분석용: J=리뷰점수, U/V=동의, AF=인정, AG=점검유형, AI=리뷰점수 집계 제외사유, AL=제외사유, AM/AN=선택동의 대상, P=설치여부(M2)
+        score: parseNum(S(r, 9)), u: S(r, 20), v: S(r, 21), p: S(r, 15), af: S(r, 31), ag: S(r, 32), ai: S(r, 34), al: S(r, 37), am: S(r, 38), an: S(r, 39),
         // 검색용: C=레포트번호, F=접수시간 / 처리시각: H=완료일자, I=완료시간 (고객명 M·가입번호 N은 개인정보라 미수집)
         rpt: S(r, 2), time: S(r, 5),
         cdate: parseDateStr(S(r, 7)), chour: parseHour(S(r, 8)), ctime: S(r, 8),
@@ -1004,8 +1004,8 @@ function renderKpis(seed, reviews) {
   const total = seed.length;
   const done = seed.filter(r => r.result === '원격 완료' || r.result === '전화 완료' || r.result === '점검완료').length;
   const scored = reviews.length;
-  // 평균 리뷰점수 = 점수합 ÷ (원격 완료 + A/S 접수 건수), AL 공란·1833 제외 — 점검자 분석과 동일한 운영 산식
-  const scoreBase = seed.filter(r => r.al === '' && !r.so.includes('1833') && (r.result === '원격 완료' || r.result === 'A/S 접수'));
+  // 평균 리뷰점수 = 점수합 ÷ (원격 완료 + A/S 접수 건수), AL·AI 공란·1833 제외 — 점검자 분석과 동일한 운영 산식
+  const scoreBase = seed.filter(r => r.al === '' && r.ai === '' && !r.so.includes('1833') && (r.result === '원격 완료' || r.result === 'A/S 접수'));
   const avgScore = scoreBase.length ? scoreBase.reduce((s, r) => s + (r.score || 0), 0) / scoreBase.length : null;
   // M2 설치율 (LGU+ · AL 공란 · 원격완료/A/S접수)
   const m2base = seed.filter(r => r.al === '' && r.so === 'LGU+' && (r.result === '원격 완료' || r.result === 'A/S 접수'));
@@ -1235,8 +1235,8 @@ function computeAgentStats(from, to) {
     const rCnt = remoteM.filter(r => r.agent2 === name).length;
     const cCnt = compM.filter(r => r.name === name).length;
     const tCnt = rtM.filter(r => r.agent === name).length;
-    // 리뷰점수 = 점수합 ÷ (원격 완료 + A/S 접수 건수), AL 공란·1833 제외 — 운영 산식
-    const base = seedM.filter(r => r.agent === name && r.al === '' && !r.so.includes('1833'));
+    // 리뷰점수 = 점수합 ÷ (원격 완료 + A/S 접수 건수), AL·AI 공란·1833 제외 — 운영 산식
+    const base = seedM.filter(r => r.agent === name && r.al === '' && r.ai === '' && !r.so.includes('1833'));
     const done = base.filter(r => r.result === '원격 완료' || r.result === 'A/S 접수');
     const scoreSum = done.reduce((s, r) => s + (r.score || 0), 0);
     const nScored = done.filter(r => r.score != null).length;
@@ -1274,7 +1274,7 @@ function computeAgentDaily(from, to) {
     if (!inR(r.date) || !r.agent || AGENT_EXCLUDE.test(r.agent)) continue;
     if (r.af === 'O') acc(r.agent, r.date).vol++;
     if (r.al === '') {
-      if (!r.so.includes('1833') && (r.result === '원격 완료' || r.result === 'A/S 접수')) {
+      if (r.ai === '' && !r.so.includes('1833') && (r.result === '원격 완료' || r.result === 'A/S 접수')) {
         const a = acc(r.agent, r.date); a.nDone++; a.scoreSum += r.score || 0;
       }
       if (r.am.startsWith('대상')) { const a = acc(r.agent, r.date); a.cd++; if (okC(r)) a.cn++; }
@@ -1509,7 +1509,7 @@ function metricsSeries(nameSet, keys, keyFn) {
     if (r.af === 'O') vol[i]++;
     if (r.al === '') {
       const isDone = r.result === '원격 완료' || r.result === 'A/S 접수';
-      if (!r.so.includes('1833') && isDone) { done[i]++; scoreSum[i] += r.score || 0; }
+      if (r.ai === '' && !r.so.includes('1833') && isDone) { done[i]++; scoreSum[i] += r.score || 0; }
       if (r.so === 'LGU+' && isDone) { m2d[i]++; if (r.p === '설치' || r.p === '설치후삭제') m2n[i]++; }
       if (r.am.startsWith('대상')) { cd[i]++; if (okC(r)) cn[i]++; }
       if (r.an.startsWith('대상')) { cd[i]++; if (okC(r)) cn[i]++; }
@@ -2038,7 +2038,7 @@ function renderCompare() {
   const dA = days(A), dB = days(B);
   const doneRate = rows => rows.length ? rows.filter(r => r.result === '원격 완료' || r.result === '전화 완료' || r.result === '점검완료').length / rows.length * 100 : null;
   const opScore = rows => {
-    const b = rows.filter(r => r.al === '' && !r.so.includes('1833') && (r.result === '원격 완료' || r.result === 'A/S 접수'));
+    const b = rows.filter(r => r.al === '' && r.ai === '' && !r.so.includes('1833') && (r.result === '원격 완료' || r.result === 'A/S 접수'));
     return b.length ? b.reduce((s, r) => s + (r.score || 0), 0) / b.length : null;
   };
   $('cmpKpis').innerHTML =
